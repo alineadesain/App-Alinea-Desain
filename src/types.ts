@@ -106,4 +106,14 @@ export interface StoreData {
   rekening: string;
   clients_slider: ClientPartner[];
   banners?: BannerSlide[];
+  // Google Apps Script Web App Integration
+  gas_web_app_url?: string;
+  last_synced_at?: string;
+  // WhatsApp API Gateway Settings
+  wa_provider?: 'fonnte' | 'fonte' | 'flowkirim' | 'starsender' | 'custom';
+  wa_api_key?: string;
+  wa_api_url?: string;
+  wa_sender_number?: string;
+  wa_auto_order?: boolean;
+  wa_auto_status?: boolean;
 }

@@ -272,10 +272,10 @@ function saveAllStoreData(storeObj) {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex bg-slate-100 p-1.5 border-b border-slate-200 text-xs font-bold gap-1">
+        <div className="flex bg-slate-100 p-1.5 border-b border-slate-200 text-xs font-bold gap-1 overflow-x-auto">
           <button
             onClick={() => setActiveTab('codegs')}
-            className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 ${
+            className={`px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === 'codegs'
                 ? 'bg-white text-teal-800 shadow-xs'
                 : 'text-slate-500 hover:text-slate-800'
@@ -286,25 +286,25 @@ function saveAllStoreData(storeObj) {
           </button>
           <button
             onClick={() => setActiveTab('indexhtml')}
-            className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 ${
+            className={`px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === 'indexhtml'
                 ? 'bg-white text-teal-800 shadow-xs'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <LayoutTemplate className="w-3.5 h-3.5 text-teal-600" />
-            <span>2. Index.html (Tampilan)</span>
+            <span>2. Index.html</span>
           </button>
           <button
             onClick={() => setActiveTab('panduan')}
-            className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 ${
+            className={`px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === 'panduan'
                 ? 'bg-white text-teal-800 shadow-xs'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             <Info className="w-3.5 h-3.5 text-amber-600" />
-            <span>3. Panduan Deploy</span>
+            <span>3. Panduan Deploy & Sync</span>
           </button>
         </div>
 
@@ -376,8 +376,9 @@ function saveAllStoreData(storeObj) {
                 <ul className="list-disc pl-5 space-y-1 text-slate-600">
                   <li><strong>Menu Customer Lengkap:</strong> Beranda, Pesan Cetak (Meteran/Satuan & DP), Katalog Produk, Profil & Riwayat.</li>
                   <li><strong>Menu Admin Terorganisir:</strong> Dashboard Omset/Laba, Transaksi (Orders & Kas Biaya Toko), Customer WA, Produk, Branding Toko.</li>
-                  <li><strong>Modal & Cetak Struk Thermal:</strong> Tombol cetak nota instan dengan printer kasir atau PDF.</li>
-                  <li><strong>Tampilan Bersih & Responsif:</strong> Memperbaiki tampilan yang sebelumnya sempit / berantakan di layar komputer maupun HP.</li>
+                  <li><strong>Kolom Sync Web App URL:</strong> Terhubung langsung dengan deployment Apps Script dengan tombol <em>Sync Now</em>.</li>
+                  <li><strong>Konfigurasi API WhatsApp:</strong> Dukungan Fonnte, Fonte, Flowkirim lengkap dengan pengujian koneksi langsung.</li>
+                  <li><strong>Bebas Login Instan:</strong> Login instan Google & shortcut uji coba cepat telah dihapus sesuai permintaan.</li>
                 </ul>
               </div>
             </div>
@@ -385,19 +386,39 @@ function saveAllStoreData(storeObj) {
 
           {activeTab === 'panduan' && (
             <div className="space-y-4 text-xs text-slate-700">
-              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
-                <div className="font-bold text-amber-900 flex items-center gap-1 text-xs">
-                  <Info className="w-3.5 h-3.5 text-amber-600" />
-                  Langkah-Langkah Pasang di Google Sheets & Apps Script:
+              {/* Bagian 1: Deploy & Sync */}
+              <div className="p-4 bg-teal-50 border border-teal-200 rounded-2xl space-y-2">
+                <div className="font-bold text-teal-900 flex items-center gap-1.5 text-xs">
+                  <span className="text-sm">🔄</span>
+                  <span>Cara Pasang & Sinkronisasi Web App URL (Google Apps Script):</span>
                 </div>
                 <ol className="list-decimal pl-5 space-y-1.5 text-slate-700">
                   <li>Buka Google Spreadsheet Anda &gt; Klik menu <strong>Ekstensi (Extensions)</strong> &gt; <strong>Apps Script</strong>.</li>
                   <li>Pada file <code className="font-bold font-mono bg-white px-1 py-0.5 rounded">Code.gs</code>, hapus seluruh isinya dan tempel kode dari tab <strong>1. Code.gs</strong>.</li>
-                  <li>Buat file HTML baru dengan nama <code className="font-bold font-mono bg-white px-1 py-0.5 rounded">Index</code> (atau buka file <code className="font-mono">Index.html</code> jika sudah ada), lalu tempel isi dari tab <strong>2. Index.html</strong> (atau dari file <code className="font-mono">gas-Index.html</code>).</li>
-                  <li>Simpan proyek (tekan <kbd className="font-mono bg-slate-200 px-1 rounded">Ctrl + S</kbd>).</li>
-                  <li>Jalankan fungsi <code className="font-mono bg-amber-100 font-bold px-1 rounded">setupDatabase</code> sekali saja untuk memastikan semua sheet (<code className="font-mono">Users, Products, Orders, Expenses, StoreData</code>) dan kolom baru terbuat.</li>
-                  <li>Lakukan Deployment: Klik <strong>Deploy</strong> (kanan atas) &gt; <strong>Kelola Deployment (Manage Deployments)</strong> &gt; Klik ikon Pensil (Edit) &gt; Pilih <strong>Versi Baru (New Version)</strong> &gt; Klik <strong>Deploy</strong>.</li>
-                  <li>Pastikan pada opsi <em>"Who has access"</em> dipilih <strong>"Anyone" (Siapa saja)</strong> agar aplikasi dapat dibuka oleh pelanggan tanpa meminta login Google Drive yang rumit.</li>
+                  <li>Buat file HTML baru dengan nama <code className="font-bold font-mono bg-white px-1 py-0.5 rounded">Index</code>, lalu tempel isi dari file <code className="font-mono">gas-Index.html</code>.</li>
+                  <li>Simpan proyek (<kbd className="font-mono bg-slate-200 px-1 rounded">Ctrl + S</kbd>).</li>
+                  <li>Jalankan fungsi <code className="font-mono bg-teal-100 font-bold px-1 rounded">setupDatabase</code> sekali saja dari menu dropdown Run Apps Script untuk memastikan semua sheet (<code className="font-mono">Users, Products, Orders, Expenses, StoreData</code>) terbuat.</li>
+                  <li>Klik <strong>Deploy</strong> &gt; <strong>Deployment Baru</strong> &gt; Pilih jenis <strong>Aplikasi Web</strong>.</li>
+                  <li>Pilih <em>Execute as</em>: <strong>Saya (email Anda)</strong>, dan <em>Who has access</em>: <strong>Anyone (Siapa saja)</strong>.</li>
+                  <li>Klik <strong>Deploy</strong>, lalu salin URL Web App yang berakhiran <code className="font-mono font-bold">/exec</code>.</li>
+                  <li>Buka Akun Admin &gt; Menu <strong>Toko</strong> &gt; Tempel URL ke kolom <strong>Web App URL</strong> &gt; Klik <strong>Sync Now</strong>.</li>
+                </ol>
+              </div>
+
+              {/* Bagian 2: WhatsApp API */}
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2">
+                <div className="font-bold text-emerald-950 flex items-center gap-1.5 text-xs">
+                  <span className="text-sm">💬</span>
+                  <span>Cara Konfigurasi API WhatsApp (Fonnte / Fonte / Flowkirim):</span>
+                </div>
+                <ol className="list-decimal pl-5 space-y-1.5 text-slate-700">
+                  <li>Pilih salah satu penyedia gateway WhatsApp: <strong>Fonnte</strong> (fonnte.com), <strong>Fonte</strong> (fonte.id), atau <strong>Flowkirim</strong> (flowkirim.com).</li>
+                  <li>Daftar akun gratis, masuk ke dasbor gateway, lalu tautkan nomor WhatsApp toko Anda dengan memindai QR Code.</li>
+                  <li>Salin <strong>API Key / Token</strong> dari dasbor penyedia.</li>
+                  <li>Buka Akun Admin &gt; Menu <strong>Toko</strong> &gt; Cari kotak <strong>Konfigurasi API WhatsApp</strong>.</li>
+                  <li>Pilih provider (misal Fonnte), tempel API Key, dan masukkan nomor WhatsApp toko Anda.</li>
+                  <li>Uji coba pengiriman dengan memasukkan nomor WA Anda di kotak pengujian lalu klik <strong>Kirim Pesan Tes</strong>.</li>
+                  <li>Klik <strong>Simpan Pengaturan WhatsApp</strong>. Sekarang nota pesanan baru dan pembaruan status akan dikirimkan otomatis ke WhatsApp pelanggan!</li>
                 </ol>
               </div>
             </div>

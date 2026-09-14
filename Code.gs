@@ -9,10 +9,51 @@ const WA_API_KEY = "MASUKKAN_API_KEY_ANDA_DISINI";
 const WA_URL = "https://api.fonnte.com/send"; 
 
 function doGet(e) {
+  // Dukungan Endpoint API JSON untuk Sync Now dari Aplikasi Web Eksternal
+  if (e && e.parameter && e.parameter.action) {
+    const action = e.parameter.action;
+    let result = {};
+
+    if (action === 'fetchAllData') {
+      result = fetchAllData();
+    } else if (action === 'ping') {
+      result = { status: 'ok', timestamp: new Date().toISOString() };
+    } else {
+      result = { error: 'Aksi tidak dikenal' };
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Tampilan Antarmuka Aplikasi Web untuk Browser Pengguna
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Alinea Desain - Percetakan & Digital Printing')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+}
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action;
+
+    let result = { success: false, message: 'Invalid action' };
+
+    if (action === 'fetchAllData') {
+      result = fetchAllData();
+    } else if (action === 'addOrder') {
+      result = addOrder(data.order);
+    } else if (action === 'saveAllStoreData') {
+      result = saveAllStoreData(data.storeData);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 // Setup pertama kali database spreadsheet (Jalankan sekali dari menu Run di Apps Script)
@@ -484,19 +525,77 @@ function saveAllStoreData(storeObj) {
   }
 }
 
-// Pengiriman Notifikasi WhatsApp (Opsional Gateway)
-function sendWA(phone, message) {
-  if (!WA_API_KEY || WA_API_KEY === "MASUKKAN_API_KEY_ANDA_DISINI") return;
+// Ambil Konfigurasi WhatsApp Dinamis dari Sheet StoreData
+function getWhatsAppConfig() {
+  const defaults = {
+    apiKey: WA_API_KEY,
+    url: WA_URL,
+    provider: 'fonnte',
+    senderNumber: '',
+    autoOrder: true,
+    autoStatus: true
+  };
+
   try {
-    const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('StoreData');
+    if (!sheet) return defaults;
+    const data = sheet.getDataRange().getValues();
+    data.forEach(row => {
+      const key = String(row[0]).trim();
+      const val = row[1];
+      if (key === 'wa_api_key' && val) defaults.apiKey = String(val).trim();
+      if (key === 'wa_api_url' && val) defaults.url = String(val).trim();
+      if (key === 'wa_provider' && val) defaults.provider = String(val).trim();
+      if (key === 'wa_sender_number' && val) defaults.senderNumber = String(val).trim();
+      if (key === 'wa_auto_order') defaults.autoOrder = val === true || val === 'true';
+      if (key === 'wa_auto_status') defaults.autoStatus = val === true || val === 'true';
+    });
+  } catch (e) {
+    Logger.log("Error getWhatsAppConfig: " + e.message);
+  }
+
+  return defaults;
+}
+
+// Pengiriman Notifikasi WhatsApp (Fonnte / Fonte / Flowkirim / Starsender / Custom)
+function sendWA(phone, message) {
+  try {
+    const cfg = getWhatsAppConfig();
+    const token = cfg.apiKey;
+    if (!token || token === "MASUKKAN_API_KEY_ANDA_DISINI") return;
+
+    let cleanPhone = String(phone).replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '62' + cleanPhone.slice(1);
+    }
+
+    const endpoint = cfg.url || 'https://api.fonnte.com/send';
+    const payload = {
+      target: cleanPhone,
+      message: message,
+      countryCode: '62'
+    };
+
     const options = {
       'method': 'post',
-      'headers': { 'Authorization': WA_API_KEY },
-      'payload': { 'target': cleanPhone, 'message': message },
+      'headers': {
+        'Authorization': token,
+        'Content-Type': 'application/json'
+      },
+      'payload': JSON.stringify(payload),
       'muteHttpExceptions': true
     };
-    UrlFetchApp.fetch(WA_URL, options);
+
+    const resp = UrlFetchApp.fetch(endpoint, options);
+    Logger.log("Kirim WA (" + cleanPhone + ") respon: " + resp.getContentText());
+    return { success: true, response: resp.getContentText() };
   } catch (e) {
     Logger.log("Gagal kirim WhatsApp: " + e.message);
+    return { success: false, message: e.message };
   }
+}
+
+// Fungsi pembantu untuk dipanggil dari antarmuka pengguna
+function sendWhatsAppNotification(phone, message) {
+  return sendWA(phone, message);
 }

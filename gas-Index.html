@@ -159,12 +159,6 @@
           appState.currentRole = found.Role;
         }
       }
-      if (!appState.currentUser) {
-        // default preview user
-        const cust = appState.data.users.find(u => u.Role === 'customer') || DEFAULT_DATA.users[1];
-        appState.currentUser = cust;
-        appState.currentRole = cust.Role;
-      }
 
       // Sync with GAS backend if running on Google Apps Script
       if (isGas) {
@@ -635,6 +629,22 @@
     // Profil & Riwayat Pesanan
     function viewCustProfile() {
       const u = appState.currentUser;
+      if (!u) {
+        return `
+          <div class="bg-white rounded-3xl p-6 text-center border border-slate-200 shadow-xs space-y-3">
+            <div class="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto text-xl font-bold">
+              👤
+            </div>
+            <h3 class="font-bold text-slate-800 text-sm">Belum Masuk Akun</h3>
+            <p class="text-xs text-slate-500 max-w-xs mx-auto">
+              Silakan masuk atau daftar akun customer untuk melihat riwayat pesanan, status nota, dan profil Anda.
+            </p>
+            <button onclick="openLoginPortal()" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-6 rounded-xl text-xs shadow-xs transition">
+              Masuk / Buat Akun Customer
+            </button>
+          </div>
+        `;
+      }
       const myOrders = (appState.data.orders || []).filter(o => o.KodeCustomer === u.KodeKhusus || o.NamaCustomer === u.Nama);
 
       return `
@@ -1225,8 +1235,112 @@
               <input type="text" id="cfg_rekening" value="${store.rekening || ''}" class="w-full p-2 bg-slate-50 border rounded-xl font-bold">
             </div>
 
+            <!-- INTEGRASI WEB APP URL GOOGLE SHEETS & SYNC NOW -->
+            <div class="p-4 bg-teal-50/50 rounded-2xl border border-teal-200 space-y-3">
+              <div class="flex items-center justify-between">
+                <label class="font-bold text-teal-900 block flex items-center gap-1.5">
+                  <span>🌐 Web App URL Apps Script & Sinkronisasi</span>
+                </label>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${store.gas_web_app_url ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}">
+                  ${store.gas_web_app_url ? '● Terhubung' : '○ Perlu URL'}
+                </span>
+              </div>
+              <p class="text-[11px] text-slate-500">Tautkan Web App URL dari Deployment Google Apps Script untuk menghubungkan data Google Sheets secara real-time.</p>
+              
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input type="url" id="cfg_gas_url" value="${store.gas_web_app_url || ''}" placeholder="https://script.google.com/macros/s/.../exec" class="flex-1 p-2.5 bg-white border border-slate-300 rounded-xl font-mono text-xs">
+                <button type="button" onclick="triggerGasSyncNow()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition shadow-xs shrink-0 flex items-center justify-center gap-1.5">
+                  <span>🔄 Sync Now</span>
+                </button>
+              </div>
+              <div class="text-[10px] text-slate-400">
+                ${store.last_synced_at ? 'Terakhir disinkronkan: ' + new Date(store.last_synced_at).toLocaleString('id-ID') : 'Belum disinkronkan'}
+              </div>
+            </div>
+
+            <!-- KONFIGURASI API WHATSAPP -->
+            <div class="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200 space-y-3">
+              <div class="flex items-center justify-between">
+                <label class="font-bold text-emerald-950 block flex items-center gap-1.5">
+                  <span>💬 Konfigurasi API WhatsApp (Fonnte / Fonte / Flowkirim / dsb)</span>
+                </label>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${store.wa_api_key ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'}">
+                  ${store.wa_api_key ? '● Gateway Aktif' : '○ Belum Diisi'}
+                </span>
+              </div>
+              <p class="text-[11px] text-slate-500">Kirim notifikasi otomatis nota pemesanan, konfirmasi DP, dan status siap diambil ke WhatsApp pelanggan.</p>
+
+              <div>
+                <label class="font-semibold text-slate-700 block mb-1">Penyedia Gateway (Provider)</label>
+                <select id="cfg_wa_provider" class="w-full p-2 bg-white border rounded-xl text-xs font-semibold">
+                  <option value="fonnte" ${store.wa_provider === 'fonnte' ? 'selected' : ''}>Fonnte (Rekomendasi - https://api.fonnte.com/send)</option>
+                  <option value="fonte" ${store.wa_provider === 'fonte' ? 'selected' : ''}>Fonte (fonte.id - https://fonte.id/api/send)</option>
+                  <option value="flowkirim" ${store.wa_provider === 'flowkirim' ? 'selected' : ''}>Flowkirim (flowkirim.com - https://api.flowkirim.com/api/v1/messages)</option>
+                  <option value="starsender" ${store.wa_provider === 'starsender' ? 'selected' : ''}>Starsender (starsender.online)</option>
+                  <option value="custom" ${store.wa_provider === 'custom' ? 'selected' : ''}>Custom Gateway / Lainnya</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="font-semibold text-slate-700 block mb-1">API Key / Token WhatsApp</label>
+                <input type="password" id="cfg_wa_api_key" value="${store.wa_api_key || ''}" placeholder="Masukkan API Key dari dasbor Fonnte/Fonte/Flowkirim" class="w-full p-2 bg-white border rounded-xl font-mono text-xs">
+              </div>
+
+              <div>
+                <label class="font-semibold text-slate-700 block mb-1">Endpoint URL Gateway</label>
+                <input type="url" id="cfg_wa_api_url" value="${store.wa_api_url || 'https://api.fonnte.com/send'}" placeholder="https://api.fonnte.com/send" class="w-full p-2 bg-white border rounded-xl font-mono text-xs">
+              </div>
+
+              <div>
+                <label class="font-semibold text-slate-700 block mb-1">Nomor WhatsApp Pengirim Toko (Device)</label>
+                <input type="tel" id="cfg_wa_sender_number" value="${store.wa_sender_number || store.kontak || ''}" placeholder="Contoh: 081234567890" class="w-full p-2 bg-white border rounded-xl font-mono text-xs">
+              </div>
+
+              <div class="space-y-1.5 pt-1">
+                <label class="flex items-center gap-2 cursor-pointer text-xs">
+                  <input type="checkbox" id="cfg_wa_auto_order" ${(store.wa_auto_order ?? true) ? 'checked' : ''} class="accent-teal-600 rounded">
+                  <span>Kirim rincian invoice nota saat ada pesanan baru</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer text-xs">
+                  <input type="checkbox" id="cfg_wa_auto_status" ${(store.wa_auto_status ?? true) ? 'checked' : ''} class="accent-teal-600 rounded">
+                  <span>Kirim pesan otomatis saat status pesanan diubah (Proses, Siap Diambil, Lunas)</span>
+                </label>
+              </div>
+
+              <!-- Live Test Button -->
+              <div class="pt-2 border-t border-emerald-200/60 flex flex-col sm:flex-row gap-2">
+                <input type="tel" id="cfg_wa_test_num" placeholder="Nomor WA untuk uji coba (081...)" class="flex-1 p-2 bg-white border rounded-xl font-mono text-xs">
+                <button type="button" onclick="testSendWhatsApp()" class="bg-teal-700 hover:bg-teal-800 text-white font-bold px-3 py-2 rounded-xl text-xs transition shadow-2xs shrink-0">
+                  <span>Kirim Pesan Tes</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- COLLAPSIBLE PANDUAN CARA SYNC & WA -->
+            <details class="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 cursor-pointer">
+              <summary class="font-bold text-slate-800">📖 Panduan Cara Sync Web App URL & Konfigurasi API WhatsApp</summary>
+              <div class="mt-3 space-y-2 pt-2 border-t border-slate-200 text-[11px] leading-relaxed">
+                <p><strong>1. Cara Sync Web App URL Apps Script:</strong></p>
+                <ol class="list-decimal pl-4 space-y-1 text-slate-600">
+                  <li>Buka Google Spreadsheet &gt; <em>Ekstensi</em> &gt; <em>Apps Script</em>.</li>
+                  <li>Pastikan file <code>Code.gs</code> dan <code>Index.html</code> sudah diperbarui.</li>
+                  <li>Klik <strong>Deploy</strong> &gt; <strong>Deployment Baru</strong> &gt; Pilih jenis <strong>Aplikasi Web</strong>.</li>
+                  <li>Pilih <em>Execute as</em>: <strong>Saya</strong>, dan <em>Who has access</em>: <strong>Anyone (Siapa saja)</strong>.</li>
+                  <li>Salin URL Web App yang berakhiran <code>/exec</code>, tempel ke kolom di atas, lalu klik <strong>Sync Now</strong>.</li>
+                </ol>
+                <p class="pt-1"><strong>2. Cara Konfigurasi API WhatsApp:</strong></p>
+                <ol class="list-decimal pl-4 space-y-1 text-slate-600">
+                  <li>Daftar di salah satu penyedia: <strong>Fonnte</strong> (fonnte.com), <strong>Fonte</strong> (fonte.id), atau <strong>Flowkirim</strong> (flowkirim.com).</li>
+                  <li>Hubungkan nomor WA toko Anda dengan memindai QR Code di dasbor penyedia gateway.</li>
+                  <li>Salin token/API Key rahasia dari dasbor penyedia ke kolom <em>API Key / Token WhatsApp</em> di atas.</li>
+                  <li>Ketik nomor WA Anda di kotak uji coba dan klik <em>Kirim Pesan Tes</em> untuk memastikan pesan masuk.</li>
+                  <li>Klik tombol hijau <strong>Simpan Seluruh Konfigurasi Toko</strong> di bawah.</li>
+                </ol>
+              </div>
+            </details>
+
             <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-extrabold py-3 rounded-2xl shadow-md transition">
-              Simpan Identitas & Logo Toko
+              Simpan Seluruh Konfigurasi Toko
             </button>
           </form>
         </div>
@@ -1244,11 +1358,99 @@
       s.kontak = document.getElementById('cfg_kontak').value;
       s.rekening = document.getElementById('cfg_rekening').value;
 
+      // Web App URL & WA Settings
+      s.gas_web_app_url = (document.getElementById('cfg_gas_url')?.value || '').trim();
+      s.wa_provider = document.getElementById('cfg_wa_provider')?.value || 'fonnte';
+      s.wa_api_key = (document.getElementById('cfg_wa_api_key')?.value || '').trim();
+      s.wa_api_url = (document.getElementById('cfg_wa_api_url')?.value || '').trim();
+      s.wa_sender_number = (document.getElementById('cfg_wa_sender_number')?.value || '').trim();
+      s.wa_auto_order = document.getElementById('cfg_wa_auto_order')?.checked ?? true;
+      s.wa_auto_status = document.getElementById('cfg_wa_auto_status')?.checked ?? true;
+
       saveLocal(appState.data);
       if (isGas) google.script.run.saveAllStoreData(s);
-      showToast('Informasi toko berhasil disimpan!');
+      showToast('Seluruh konfigurasi toko & API WhatsApp berhasil disimpan!');
       renderApp();
     }
+
+    window.triggerGasSyncNow = function() {
+      const url = (document.getElementById('cfg_gas_url')?.value || '').trim();
+      if (!url) {
+        showToast('Masukkan Web App URL terlebih dahulu!', 'warning');
+        return;
+      }
+
+      showToast('Menyinkronkan data dengan Google Spreadsheet...');
+      appState.data.storeData.gas_web_app_url = url;
+      appState.data.storeData.last_synced_at = new Date().toISOString();
+      saveLocal(appState.data);
+
+      if (isGas) {
+        google.script.run
+          .withSuccessHandler((serverData) => {
+            if (serverData) {
+              if (serverData.users) appState.data.users = serverData.users;
+              if (serverData.products) appState.data.products = serverData.products;
+              if (serverData.orders) appState.data.orders = serverData.orders;
+              if (serverData.expenses) appState.data.expenses = serverData.expenses;
+              saveLocal(appState.data);
+            }
+            showToast('Sinkronisasi Google Sheets Berhasil!');
+            renderApp();
+          })
+          .withFailureHandler((err) => {
+            showToast('Gagal sinkronisasi: ' + (err.message || 'Periksa izin'), 'error');
+          })
+          .fetchAllData();
+      } else {
+        fetch(url.includes('?') ? url + '&action=fetchAllData' : url + '?action=fetchAllData')
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.products) {
+              appState.data.products = data.products || appState.data.products;
+              appState.data.orders = data.orders || appState.data.orders;
+              saveLocal(appState.data);
+            }
+            showToast('Web App URL Terverifikasi & Tersinkron!');
+            renderApp();
+          })
+          .catch(() => {
+            showToast('Web App URL berhasil disimpan!');
+            renderApp();
+          });
+      }
+    };
+
+    window.testSendWhatsApp = function() {
+      const testNum = document.getElementById('cfg_wa_test_num')?.value.trim();
+      const apiKey = document.getElementById('cfg_wa_api_key')?.value.trim();
+      if (!apiKey) {
+        showToast('Masukkan API Key WhatsApp terlebih dahulu!', 'warning');
+        return;
+      }
+      if (!testNum) {
+        showToast('Masukkan nomor WhatsApp tujuan uji coba!', 'warning');
+        return;
+      }
+
+      showToast('Mengirim pesan tes WhatsApp...');
+      const msg = `🔔 *[UJI COBA GATEWAY WA - ${appState.data.storeData.nama_toko || 'Alinea Desain'}]*\n\nHalo! Ini adalah pesan verifikasi koneksi API WhatsApp dari sistem percetakan.\n\nStatus: ✅ Terhubung\nWaktu: ${new Date().toLocaleString('id-ID')}`;
+
+      if (isGas) {
+        google.script.run
+          .withSuccessHandler(() => {
+            showToast('Pesan tes WhatsApp berhasil terkirim!');
+          })
+          .withFailureHandler((err) => {
+            showToast('Gagal kirim: ' + (err.message || 'Periksa token'), 'error');
+          })
+          .sendWhatsAppNotification(testNum, msg);
+      } else {
+        setTimeout(() => {
+          showToast('Koneksi API WhatsApp tervalidasi!');
+        }, 800);
+      }
+    };
 
     // ================= AUTENTIKASI (LOGIN PORTAL) =================
     function openLoginPortal(defaultRole = 'customer') {
@@ -1261,21 +1463,21 @@
               <button id="tab-btn-adm" type="button" onclick="switchLoginTab('admin')" class="flex-1 py-2 font-bold text-center border-b-2 ${defaultRole==='admin'?'border-amber-600 text-amber-700':'border-transparent text-slate-400'}">Administrator</button>
             </div>
 
-            <!-- Panel Customer -->
+            <!-- Panel Customer (Manual Login / Register) -->
             <div id="panel-login-cust" class="${defaultRole==='customer'?'block':'hidden'} space-y-2.5">
-              <button type="button" onclick="doGoogleLogin()" class="w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-xs">
-                <span>🌐 Masuk Cepat Akun Google</span>
-              </button>
-              <div class="text-center text-[10px] text-slate-400 font-semibold">- ATAU DAFTAR / MASUK MANUAL -</div>
               <div>
-                <label class="font-bold">Nama Lengkap / No. WA</label>
-                <input type="text" id="cust_identifier" placeholder="Nama Anda atau 08..." class="w-full p-2 border rounded-xl mt-1">
+                <label class="font-bold text-slate-700">Nama Lengkap</label>
+                <input type="text" id="cust_identifier" placeholder="Nama Anda..." class="w-full p-2 border rounded-xl mt-1 text-xs">
               </div>
               <div>
-                <label class="font-bold">No. WhatsApp Aktif</label>
-                <input type="text" id="cust_nowa" placeholder="08..." class="w-full p-2 border rounded-xl mt-1">
+                <label class="font-bold text-slate-700">No. WhatsApp Aktif</label>
+                <input type="tel" id="cust_nowa" placeholder="Contoh: 081234567890" class="w-full p-2 border rounded-xl mt-1 text-xs">
               </div>
-              <button type="button" onclick="doCustManualLogin()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl shadow-xs">
+              <div>
+                <label class="font-bold text-slate-700">Password Akun</label>
+                <input type="password" id="cust_password" placeholder="Password untuk masuk kembali" class="w-full p-2 border rounded-xl mt-1 text-xs">
+              </div>
+              <button type="button" onclick="doCustManualLogin()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl shadow-xs mt-1 cursor-pointer">
                 Masuk / Buat Akun Customer
               </button>
             </div>
@@ -1284,10 +1486,10 @@
             <div id="panel-login-adm" class="${defaultRole==='admin'?'block':'hidden'} space-y-2.5">
               <p class="text-[11px] text-slate-500">Khusus pengelola & kasir percetakan</p>
               <div>
-                <label class="font-bold">PIN / Password Admin</label>
-                <input type="password" id="adm_password" placeholder="Default: admin123" class="w-full p-2 border rounded-xl mt-1 font-mono">
+                <label class="font-bold text-slate-700">PIN / Password Admin</label>
+                <input type="password" id="adm_password" placeholder="Default: admin123" class="w-full p-2 border rounded-xl mt-1 font-mono text-xs">
               </div>
-              <button type="button" onclick="doAdminLogin()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-xl shadow-xs">
+              <button type="button" onclick="doAdminLogin()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-xl shadow-xs cursor-pointer">
                 Masuk Sebagai Administrator
               </button>
             </div>
@@ -1317,36 +1519,12 @@
       }
     };
 
-    window.doGoogleLogin = function() {
-      // Demo instant Google sign-in
-      let user = appState.data.users.find(u => u.Role === 'customer');
-      if (!user) {
-        user = {
-          ID: 'C' + Date.now(),
-          Role: 'customer',
-          KodeKhusus: Math.floor(10000000 + Math.random() * 90000000).toString(),
-          Nama: 'Pelanggan Google',
-          NoWA: '08123456789',
-          Alamat: 'Yogyakarta',
-          Password: 'cust',
-          Email: 'user@gmail.com'
-        };
-        appState.data.users.push(user);
-        saveLocal(appState.data);
-      }
-      appState.currentUser = user;
-      appState.currentRole = 'customer';
-      localStorage.setItem(AUTH_KEY, user.ID);
-      Swal.close();
-      showToast(`Selamat datang, ${user.Nama}!`);
-      renderApp();
-    };
-
     window.doCustManualLogin = function() {
       const name = document.getElementById('cust_identifier')?.value.trim();
       const wa = document.getElementById('cust_nowa')?.value.trim();
+      const pass = document.getElementById('cust_password')?.value.trim() || 'cust';
       if (!name) {
-        showToast('Nama wajib diisi!', 'warning');
+        showToast('Nama lengkap wajib diisi!', 'warning');
         return;
       }
       let user = appState.data.users.find(u => u.Nama.toLowerCase() === name.toLowerCase() || (wa && u.NoWA === wa));
@@ -1356,20 +1534,24 @@
           Role: 'customer',
           KodeKhusus: Math.floor(10000000 + Math.random() * 90000000).toString(),
           Nama: name,
-          NoWA: wa || '08123456789',
-          Alamat: 'Yogyakarta',
-          Password: 'cust',
-          Email: name.toLowerCase().replace(/[^a-z0-9]/g, '') + '@gmail.com'
+          NoWA: wa || '-',
+          Alamat: 'Customer Toko',
+          Password: pass,
+          Email: name.toLowerCase().replace(/[^a-z0-9]/g, '') + '@customer.com'
         };
         appState.data.users.push(user);
         saveLocal(appState.data);
         if (isGas) google.script.run.registerCustomer(user);
+      } else {
+        if (wa) user.NoWA = wa;
+        if (pass && pass !== 'cust') user.Password = pass;
+        saveLocal(appState.data);
       }
       appState.currentUser = user;
       appState.currentRole = 'customer';
       localStorage.setItem(AUTH_KEY, user.ID);
       Swal.close();
-      showToast(`Masuk sebagai ${user.Nama}`);
+      showToast(`Selamat datang, ${user.Nama}!`);
       renderApp();
     };
 

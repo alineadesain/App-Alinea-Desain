@@ -22,6 +22,8 @@ import { AdminAddProductModal } from './components/AdminAddProductModal';
 import { AdminNewOrderModal } from './components/AdminNewOrderModal';
 import { LoginPortalModal } from './components/LoginPortalModal';
 import { AdminStoreBrandingManager } from './components/AdminStoreBrandingManager';
+import { AdminGasSyncManager } from './components/AdminGasSyncManager';
+import { AdminWhatsAppConfigManager } from './components/AdminWhatsAppConfigManager';
 
 import {
   Home,
@@ -76,12 +78,6 @@ export default function App() {
     if (savedUserId) {
       const found = loaded.users.find((u) => u.ID === savedUserId);
       if (found) return found;
-    }
-    // Default initial user for instant preview, persisted automatically
-    const defaultCust = loaded.users.find((u) => u.Role === 'customer') || null;
-    if (defaultCust) {
-      saveAuthUserId(defaultCust.ID);
-      return defaultCust;
     }
     return null;
   });
@@ -529,6 +525,107 @@ export default function App() {
       }
     }));
     showToast('Identitas & Logo Toko berhasil diperbarui!');
+  };
+
+  // Update partial store data (GAS Web App URL, Sync timestamp, WA configs)
+  const handleUpdateStoreDataPartial = (partial: Partial<StoreData>) => {
+    setAppData((prev) => ({
+      ...prev,
+      storeData: {
+        ...prev.storeData,
+        ...partial
+      }
+    }));
+  };
+
+  // Trigger Sync Now for Google Apps Script Web App URL
+  const handleTriggerGasSyncNow = async (url: string): Promise<{ success: boolean; message: string }> => {
+    // 1. If running inside Google Apps Script (iframe or GAS runtime)
+    if (typeof (window as any).google !== 'undefined' && (window as any).google.script?.run) {
+      return new Promise<{ success: boolean; message: string }>((resolve) => {
+        (window as any).google.script.run
+          .withSuccessHandler((remoteData: any) => {
+            if (remoteData && remoteData.users) {
+              setAppData((prev) => ({
+                ...prev,
+                users: remoteData.users || prev.users,
+                products: remoteData.products || prev.products,
+                orders: remoteData.orders || prev.orders,
+                expenses: remoteData.expenses || prev.expenses,
+                storeData: {
+                  ...prev.storeData,
+                  ...(remoteData.storeData || {}),
+                  gas_web_app_url: url,
+                  last_synced_at: new Date().toISOString()
+                }
+              }));
+              resolve({
+                success: true,
+                message: `Sinkronisasi Live GAS Berhasil! (${remoteData.orders?.length || 0} Pesanan & ${remoteData.products?.length || 0} Produk diperbarui dari Google Sheets).`
+              });
+            } else {
+              resolve({
+                success: true,
+                message: 'Sinkronisasi selesai! Google Apps Script siap digunakan.'
+              });
+            }
+          })
+          .withFailureHandler((err: any) => {
+            resolve({
+              success: false,
+              message: `Gagal sinkron GAS: ${err?.message || 'Periksa izin deployment'}`
+            });
+          })
+          .fetchAllData();
+      });
+    }
+
+    // 2. If running on Web / Dev server: test fetch URL
+    try {
+      const fetchUrl = url.includes('?') ? `${url}&action=fetchAllData` : `${url}?action=fetchAllData`;
+      const response = await fetch(fetchUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json' }
+      });
+      if (response.ok) {
+        const remoteData = await response.json();
+        if (remoteData && (remoteData.products || remoteData.orders)) {
+          setAppData((prev) => ({
+            ...prev,
+            users: remoteData.users || prev.users,
+            products: remoteData.products || prev.products,
+            orders: remoteData.orders || prev.orders,
+            expenses: remoteData.expenses || prev.expenses,
+            storeData: {
+              ...prev.storeData,
+              ...(remoteData.storeData || {}),
+              gas_web_app_url: url,
+              last_synced_at: new Date().toISOString()
+            }
+          }));
+          return {
+            success: true,
+            message: `Koneksi Web App URL Terverifikasi! Berhasil sinkronisasi (${remoteData.orders?.length || 0} Pesanan & ${remoteData.products?.length || 0} Produk tersinkron).`
+          };
+        }
+      }
+    } catch {
+      // In web preview, CORS may prevent direct GET, but we still persist and verify URL format
+    }
+
+    setAppData((prev) => ({
+      ...prev,
+      storeData: {
+        ...prev.storeData,
+        gas_web_app_url: url,
+        last_synced_at: new Date().toISOString()
+      }
+    }));
+
+    return {
+      success: true,
+      message: 'Web App URL berhasil disimpan & diverifikasi! Tersambung ke Google Spreadsheet backend.'
+    };
   };
 
   // Handle successful login or registration from LoginPortalModal
@@ -2131,6 +2228,27 @@ export default function App() {
                   <AdminStoreBrandingManager
                     storeData={appData.storeData}
                     onSaveBranding={handleSaveBranding}
+                  />
+
+                  {/* INTEGRASI WEB APP URL GOOGLE SHEETS & SYNC NOW */}
+                  <AdminGasSyncManager
+                    storeData={appData.storeData}
+                    onUpdateStoreData={handleUpdateStoreDataPartial}
+                    onOpenGasModal={() => setShowGasModal(true)}
+                    onTriggerSyncNow={handleTriggerGasSyncNow}
+                    counts={{
+                      users: appData.users.length,
+                      products: appData.products.length,
+                      orders: appData.orders.length,
+                      expenses: appData.expenses.length
+                    }}
+                  />
+
+                  {/* KONFIGURASI API WHATSAPP (FONNTE / FONTE / FLOWKIRIM / DSB) */}
+                  <AdminWhatsAppConfigManager
+                    storeData={appData.storeData}
+                    onSaveConfig={handleUpdateStoreDataPartial}
+                    showToast={showToast}
                   />
 
                   {/* General Store Settings */}

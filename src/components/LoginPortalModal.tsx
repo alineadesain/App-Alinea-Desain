@@ -69,69 +69,10 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
   // Error & Feedback Message
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Google OAuth Picker Dialog
-  const [showGooglePicker, setShowGooglePicker] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [customGoogleName, setCustomGoogleName] = useState('');
-
   if (!isOpen) return null;
-
-  // Preset Google Accounts
-  const googleAccountsList = [
-    {
-      name: 'Alinea Desain',
-      email: 'alineadesain@gmail.com',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'
-    },
-    {
-      name: 'Budi Santoso',
-      email: 'budi.santoso@gmail.com',
-      avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100&auto=format&fit=crop&q=80'
-    }
-  ];
-
-  // Quick Preset Handlers
-  const handleQuickCustomerLogin = (customerUser: UserType) => {
-    onLoginSuccess(customerUser);
-    if (onClose) onClose();
-  };
 
   const handleQuickAdminLogin = (adminUser: UserType) => {
     onLoginSuccess(adminUser);
-    if (onClose) onClose();
-  };
-
-  // Google Sign-In Action
-  const handleSelectGoogleAccount = (account: { name: string; email: string; avatar: string }) => {
-    setErrorMsg('');
-    const existing = existingUsers.find(
-      (u) =>
-        (u.Email && u.Email.toLowerCase() === account.email.toLowerCase()) ||
-        u.Nama.toLowerCase() === account.name.toLowerCase()
-    );
-
-    if (existing) {
-      onLoginSuccess(existing);
-      if (onClose) onClose();
-      return;
-    }
-
-    // Brand new Google Customer
-    const randomCode = Math.floor(10000000 + Math.random() * 90000000).toString();
-    const newUser: UserType = {
-      ID: `G-${Date.now().toString().slice(-4)}`,
-      Role: 'customer',
-      KodeKhusus: randomCode,
-      Nama: account.name,
-      NoWA: '0812' + Math.floor(10000000 + Math.random() * 90000000).toString().slice(0, 8),
-      Email: account.email,
-      Alamat: 'Yogyakarta, Indonesia',
-      Password: 'google-oauth-user',
-      TglDaftar: new Date().toISOString(),
-      Avatar: account.avatar
-    };
-
-    onLoginSuccess(newUser);
     if (onClose) onClose();
   };
 
@@ -258,9 +199,8 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
     if (onClose) onClose();
   };
 
-  // Sample admin & customer accounts for quick testing
+  // Sample admin accounts for quick testing
   const demoAdmins = existingUsers.filter((u) => u.Role === 'admin');
-  const demoCustomers = existingUsers.filter((u) => u.Role === 'customer');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 overflow-y-auto">
@@ -402,110 +342,6 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                 </button>
               </div>
 
-              {/* Quick Google Sign In */}
-              <div className="bg-teal-50/60 border border-teal-100 p-3 rounded-2xl">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold text-teal-900 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                    Masuk Instan dengan Google
-                  </span>
-                  <span className="text-[10px] text-teal-700 font-medium">Cepat & Aman</span>
-                </div>
-
-                <div className="space-y-2">
-                  {googleAccountsList.map((acc, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleSelectGoogleAccount(acc)}
-                      className="w-full bg-white hover:bg-teal-50/80 border border-slate-200/90 hover:border-teal-300 p-2 rounded-xl text-left flex items-center justify-between transition group shadow-2xs"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <img
-                          src={acc.avatar}
-                          alt={acc.name}
-                          className="w-7 h-7 rounded-full object-cover border border-slate-200"
-                        />
-                        <div>
-                          <p className="text-xs font-bold text-slate-800 group-hover:text-teal-800">
-                            {acc.name}
-                          </p>
-                          <p className="text-[10px] text-slate-500">{acc.email}</p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-200">
-                        Pilih
-                      </span>
-                    </button>
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => setShowGooglePicker(!showGooglePicker)}
-                    className="w-full text-center text-[11px] font-bold text-teal-700 hover:text-teal-900 py-1"
-                  >
-                    {showGooglePicker ? 'Tutup Input Gmail Kustom' : '+ Masuk Menggunakan Alamat Gmail Lain'}
-                  </button>
-
-                  {showGooglePicker && (
-                    <div className="bg-white p-3 rounded-xl border border-teal-200 space-y-2 mt-2">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">
-                          Nama Anda
-                        </label>
-                        <input
-                          type="text"
-                          value={customGoogleName}
-                          onChange={(e) => setCustomGoogleName(e.target.value)}
-                          placeholder="Contoh: Siti Rahma"
-                          className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-teal-600"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 block mb-1">
-                          Email Gmail
-                        </label>
-                        <input
-                          type="email"
-                          value={customGoogleEmail}
-                          onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                          placeholder="nama.anda@gmail.com"
-                          className="w-full text-xs p-2 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:outline-teal-600"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!customGoogleEmail.trim()) {
-                            setErrorMsg('Masukkan alamat email Gmail!');
-                            return;
-                          }
-                          const email = customGoogleEmail.trim().toLowerCase();
-                          const formattedEmail = email.includes('@') ? email : `${email}@gmail.com`;
-                          const name = customGoogleName.trim() || formattedEmail.split('@')[0];
-                          handleSelectGoogleAccount({
-                            name,
-                            email: formattedEmail,
-                            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80'
-                          });
-                        }}
-                        className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 rounded-lg text-xs transition"
-                      >
-                        Lanjutkan dengan Gmail Ini
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 text-slate-400 my-2">
-                <div className="h-px bg-slate-200 flex-1" />
-                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
-                  atau formulir biasa
-                </span>
-                <div className="h-px bg-slate-200 flex-1" />
-              </div>
-
               {/* CUSTOMER LOGIN FORM */}
               {custMode === 'login' ? (
                 <form onSubmit={handleCustomerLoginSubmit} className="space-y-3">
@@ -558,27 +394,6 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                     <LogIn className="w-4 h-4" />
                     <span>Masuk Sebagai Customer</span>
                   </button>
-
-                  {/* Demo Quick Pick for Customer */}
-                  {demoCustomers.length > 0 && (
-                    <div className="pt-2">
-                      <p className="text-[10px] text-slate-400 text-center mb-1.5">
-                        Shortcut Uji Coba Cepat Customer:
-                      </p>
-                      <div className="flex flex-wrap gap-1.5 justify-center">
-                        {demoCustomers.slice(0, 2).map((dc) => (
-                          <button
-                            key={dc.ID}
-                            type="button"
-                            onClick={() => handleQuickCustomerLogin(dc)}
-                            className="text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg transition border border-slate-200"
-                          >
-                            👤 {dc.Nama} ({dc.NoWA})
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </form>
               ) : (
                 /* CUSTOMER REGISTER FORM */

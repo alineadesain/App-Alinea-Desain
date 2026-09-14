@@ -306,7 +306,15 @@ export const DEFAULT_STORE_DATA: StoreData = {
   kontak: '081234567890',
   rekening: 'BCA 1234567890 a.n ALINEA DESAIN CREATIVE',
   clients_slider: DEFAULT_CLIENTS,
-  banners: DEFAULT_BANNERS
+  banners: DEFAULT_BANNERS,
+  gas_web_app_url: '',
+  last_synced_at: '',
+  wa_provider: 'fonnte',
+  wa_api_key: '',
+  wa_api_url: 'https://api.fonnte.com/send',
+  wa_sender_number: '081234567890',
+  wa_auto_order: true,
+  wa_auto_status: true
 };
 
 const STORAGE_KEY = 'alinea_desain_store_v5';
