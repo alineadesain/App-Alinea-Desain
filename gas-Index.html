@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Alinea Desain - Percetakan & Digital Printing</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- Google Font Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #0f172a; margin: 0; padding: 0; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+    .animate-marquee { display: inline-block; white-space: nowrap; animation: marquee 18s linear infinite; }
+    .animate-marquee:hover { animation-play-state: paused; }
+    @keyframes loopMarquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+    .animate-clients { display: flex; width: max-content; animation: loopMarquee 26s linear infinite; }
+    .animate-clients:hover { animation-play-state: paused; }
+  </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen bg-slate-900 flex justify-center">
+
+  <div id="app" class="w-full max-w-2xl bg-white min-h-screen shadow-2xl flex flex-col relative pb-20">
+    <!-- Header -->
+    <header class="bg-slate-900 text-white sticky top-0 z-40 shadow-md">
+      <div class="px-4 py-3 flex items-center justify-between border-b border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <div id="header-logo-container">
+            <div class="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center text-white font-black text-sm shadow">AD</div>
+          </div>
+          <div>
+            <h1 id="header-nama-toko" class="font-bold text-sm tracking-tight leading-none text-white">Alinea Desain</h1>
+            <p id="header-tagline" class="text-[10px] text-teal-300 font-medium mt-0.5 leading-none">Percetakan & Digital Printing</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div id="auth-pill" class="flex items-center gap-1.5">
+            <!-- Rendered by JS: user name, role, and logout button -->
+          </div>
+        </div>
+      </div>
+      <!-- Running Text Marquee -->
+      <div class="bg-teal-900/90 text-teal-100 text-[11px] font-medium px-3 py-1.5 overflow-hidden flex items-center gap-2 border-b border-teal-800">
+        <span class="bg-teal-700 text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded text-white shrink-0">Info</span>
+        <div class="overflow-hidden whitespace-nowrap flex-1">
+          <div id="running-text-content" class="animate-marquee">
+            Selamat datang di Percetakan Alinea Desain! Cetak kilat MMT & stiker presisi, konsultasi gratis, diskon kampus & instansi.
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main id="main-content" class="flex-1 p-4 overflow-y-auto">
+      <div class="flex flex-col items-center justify-center py-20 text-slate-400">
+        <div class="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-xs mt-3 font-semibold text-slate-500">Memuat Alinea Desain App...</p>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav id="bottom-nav" class="fixed bottom-0 w-full max-w-2xl bg-white border-t border-slate-200 py-1.5 px-2 flex justify-around items-center z-40 shadow-lg">
+      <!-- Injected by JS based on role -->
+    </nav>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'alinea_desain_gas_v5';
+    const AUTH_KEY = 'alinea_gas_active_user_id';
+
+    const DEFAULT_DATA = {
+      users: [
+        { ID: 'U1', Role: 'admin', KodeKhusus: '-', Nama: 'Admin Alinea', NoWA: '081234567890', Alamat: 'Yogyakarta', Password: 'admin123', Email: 'admin@alineadesain.com' },
+        { ID: 'C1', Role: 'customer', KodeKhusus: '88392011', Nama: 'Budi Santoso', NoWA: '089876543210', Alamat: 'Sleman, Yogyakarta', Password: 'cust123', Email: 'budi@gmail.com' }
+      ],
+      products: [
+        { ID: 'P1', Nama: 'Banner MMT 280gr (Outdoor/Indoor)', Kategori: 'meteran', Harga: 21000, Deskripsi: 'Bahan standar kuat untuk spanduk toko, warung, baliho. Tahan panas & hujan.', Thumbnail: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=400&auto=format&fit=crop&q=80', Terjual: 142, HargaDesain: 15000, HargaCutting: 5000, HargaLaminating: 0 },
+        { ID: 'P2', Nama: 'Banner Korea MMT 440gr Tebal', Kategori: 'meteran', Harga: 38000, Deskripsi: 'Bahan tebal premium tidak tembus pandang, warna pekat & awet.', Thumbnail: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?w=400&auto=format&fit=crop&q=80', Terjual: 78, HargaDesain: 15000, HargaCutting: 5000, HargaLaminating: 0 },
+        { ID: 'P3', Nama: 'Sticker Vinyl A3+ Kiss Cut Anti Air', Kategori: 'satuan', Harga: 12000, Deskripsi: 'Stiker vinyl anti air untuk label kemasan makanan/minuman UMKM.', Thumbnail: 'https://images.unsplash.com/photo-1572375992501-4b0892d50c69?w=400&auto=format&fit=crop&q=80', Terjual: 95, HargaDesain: 15000, HargaCutting: 3000, HargaLaminating: 4000 },
+        { ID: 'P4', Nama: 'Kartu Nama Eksklusif (1 Box / 100 Pcs)', Kategori: 'satuan', Harga: 35000, Deskripsi: '1 box isi 100 lembar art carton 260gr dengan box mika bening.', Thumbnail: 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=400&auto=format&fit=crop&q=80', Terjual: 56, HargaDesain: 15000, HargaCutting: 0, HargaLaminating: 7000 },
+        { ID: 'P5', Nama: 'X-Banner 60x160 cm Komplit Rangka', Kategori: 'satuan', Harga: 65000, Deskripsi: 'Stand X-Banner display aluminium + cetak visual bahan MMT tajam.', Thumbnail: 'https://images.unsplash.com/photo-1563986768494-4dee2763ff3f?w=400&auto=format&fit=crop&q=80', Terjual: 41, HargaDesain: 15000, HargaCutting: 0, HargaLaminating: 10000 }
+      ],
+      orders: [
+        { ID: 'ORD172901', Tgl: new Date().toISOString(), KodeCustomer: '88392011', NamaCustomer: 'Budi Santoso', NoCustomer: '089876543210', IDProduk: 'P1', NamaProduk: 'Banner MMT 280gr (Outdoor/Indoor)', Kategori: 'meteran', Qty: 2, Panjang: 200, Lebar: 100, Finishing: 'Simkel (Mata Ayam)', JasaCutting: 0, JasaLaminating: 0, JasaDesain: 15000, TotalHarga: 99000, StatusBayar: 'Lunas', StatusOrder: 'Selesai', DP: 0, Catatan: 'Warna dominan biru cerah' }
+      ],
+      expenses: [
+        { ID: 'EXP101', Tgl: new Date().toISOString().split('T')[0], Total: 350000, Toko: 'CV Bahan Grafindo', Detail: 'Beli 1 Roll Bahan MMT 280gsm', NotaUrl: '' }
+      ],
+      storeData: {
+        nama_toko: 'Alinea Desain',
+        tagline: 'Percetakan & Digital Printing Cepat Berkualitas',
+        logo_url: '',
+        running_text: 'Selamat datang di Alinea Desain! Promo cetak kilat MMT & stiker presisi, konsultasi gratis, diskon instansi/kampus.',
+        alamat: 'Jl. Prof. Dr. Sardjito No. 45, Terban, Gondokusuman, Yogyakarta (Dekat Kampus UGM)',
+        kontak: '081234567890',
+        rekening: 'BCA 1234567890 a.n ALINEA DESAIN CREATIVE',
+        clients_slider: [
+          { id: 'c1', nama: 'Universitas Gadjah Mada', logo: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=160&auto=format&fit=crop&q=80', keterangan: 'Cetak Buku Panduan, Banner Seminar & Sertifikat KKN' },
+          { id: 'c2', nama: 'Universitas Diponegoro', logo: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=160&auto=format&fit=crop&q=80', keterangan: 'Backdrop Wisuda & Souvenir Dies Natalis' },
+          { id: 'c3', nama: 'Rubytech Digital', logo: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=160&auto=format&fit=crop&q=80', keterangan: 'Branding Booth Expo, X-Banner & ID Card' },
+          { id: 'c4', nama: 'J&T Express Jogja', logo: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=160&auto=format&fit=crop&q=80', keterangan: 'Sticker Thermal Label & Banner Outlet' }
+        ]
+      }
+    };
+
+    let appState = {
+      currentUser: null,
+      currentRole: 'customer',
+      activeTab: 'home',
+      adminTab: 'dashboard',
+      data: DEFAULT_DATA,
+      selectedProductForOrder: null
+    };
+
+    const isGas = typeof google !== 'undefined' && google.script && google.script.run;
+
+    function formatRp(num) {
+      return 'Rp ' + (Number(num) || 0).toLocaleString('id-ID');
+    }
+
+    function showToast(msg, icon = 'success') {
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: icon,
+        title: msg,
+        showConfirmButton: false,
+        timer: 2500
+      });
+    }
+
+    function loadLocal() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch(e){}
+      return DEFAULT_DATA;
+    }
+
+    function saveLocal(data) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch(e){}
+    }
+
+    async function initApp() {
+      appState.data = loadLocal();
+      
+      // Auto restore login session
+      const savedUid = localStorage.getItem(AUTH_KEY);
+      if (savedUid && savedUid !== 'LOGGED_OUT') {
+        const found = appState.data.users.find(u => u.ID === savedUid);
+        if (found) {
+          appState.currentUser = found;
+          appState.currentRole = found.Role;
+        }
+      }
+      if (!appState.currentUser) {
+        // default preview user
+        const cust = appState.data.users.find(u => u.Role === 'customer') || DEFAULT_DATA.users[1];
+        appState.currentUser = cust;
+        appState.currentRole = cust.Role;
+      }
+
+      // Sync with GAS backend if running on Google Apps Script
+      if (isGas) {
+        google.script.run
+          .withSuccessHandler(serverData => {
+            if (serverData && serverData.users && serverData.users.length > 0) {
+              appState.data.users = serverData.users;
+              appState.data.products = serverData.products || [];
+              appState.data.orders = serverData.orders || [];
+              appState.data.expenses = serverData.expenses || [];
+              if (serverData.storeData && Array.isArray(serverData.storeData)) {
+                serverData.storeData.forEach(item => {
+                  if (item.Key === 'clients_slider') {
+                    try { appState.data.storeData.clients_slider = JSON.parse(item.Value); } catch(e){}
+                  } else if (item.Key) {
+                    appState.data.storeData[item.Key] = item.Value;
+                  }
+                });
+              }
+              saveLocal(appState.data);
+              renderApp();
+            }
+          })
+          .fetchAllData();
+      }
+
+      renderApp();
+    }
+
+    function renderApp() {
+      const store = appState.data.storeData;
+      document.getElementById('header-nama-toko').textContent = store.nama_toko || 'Alinea Desain';
+      document.getElementById('header-tagline').textContent = store.tagline || 'Percetakan & Digital Printing';
+      document.getElementById('running-text-content').textContent = store.running_text || 'Selamat datang di Alinea Desain!';
+      
+      const logoContainer = document.getElementById('header-logo-container');
+      if (store.logo_url) {
+        logoContainer.innerHTML = `<img src="${store.logo_url}" class="w-9 h-9 rounded-xl object-contain bg-white p-0.5 shadow" onerror="this.outerHTML='<div class=\\'w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center text-white font-black text-sm shadow\\'>AD</div>'">`;
+      } else {
+        logoContainer.innerHTML = `<div class="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center text-white font-black text-sm shadow">AD</div>`;
+      }
+
+      // Render Auth Pill
+      const authPill = document.getElementById('auth-pill');
+      if (appState.currentUser) {
+        const isAdm = appState.currentUser.Role === 'admin';
+        authPill.innerHTML = `
+          <div class="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1">
+            <span class="w-2 h-2 rounded-full ${isAdm ? 'bg-amber-400' : 'bg-emerald-400'}"></span>
+            <span class="text-xs font-bold text-slate-200 truncate max-w-[100px]">${appState.currentUser.Nama.split(' ')[0]}</span>
+            <span class="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded ${isAdm ? 'bg-rose-950 text-rose-300' : 'bg-teal-950 text-teal-300'}">${isAdm ? 'Admin' : 'Cust'}</span>
+          </div>
+          <button onclick="handleLogout()" title="Keluar Akun" class="bg-rose-950/70 hover:bg-rose-900 text-rose-300 px-2 py-1 rounded-xl text-xs font-bold border border-rose-800 transition">Keluar</button>
+        `;
+      } else {
+        authPill.innerHTML = `
+          <button onclick="openLoginPortal()" class="bg-teal-600 hover:bg-teal-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow">Masuk</button>
+        `;
+      }
+
+      // Render Main Content and Bottom Navigation
+      if (appState.currentRole === 'admin') {
+        renderAdminNav();
+        renderAdminContent();
+      } else {
+        renderCustomerNav();
+        renderCustomerContent();
+      }
+    }
+
+    // ================= CUSTOMER VIEW =================
+    function renderCustomerNav() {
+      const nav = document.getElementById('bottom-nav');
+      const tabs = [
+        { id: 'home', label: 'Beranda', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+        { id: 'order', label: 'Pesan Cetak', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z' },
+        { id: 'products', label: 'Katalog', icon: 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z' },
+        { id: 'profile', label: 'Profil & Order', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' }
+      ];
+
+      nav.innerHTML = tabs.map(t => {
+        const active = appState.activeTab === t.id;
+        return `
+          <button onclick="setCustTab('${t.id}')" class="flex flex-col items-center py-1 flex-1 ${active ? 'text-teal-600 font-bold' : 'text-slate-400 font-medium'}">
+            <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="${active ? 2.5 : 1.8}"><path stroke-linecap="round" stroke-linejoin="round" d="${t.icon}"></path></svg>
+            <span class="text-[10px] leading-none">${t.label}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function setCustTab(tab) {
+      appState.activeTab = tab;
+      renderApp();
+    }
+
+    function renderCustomerContent() {
+      const main = document.getElementById('main-content');
+      if (appState.activeTab === 'home') main.innerHTML = viewCustHome();
+      else if (appState.activeTab === 'order') main.innerHTML = viewCustOrder();
+      else if (appState.activeTab === 'products') main.innerHTML = viewCustProducts();
+      else if (appState.activeTab === 'profile') main.innerHTML = viewCustProfile();
+    }
+
+    function viewCustHome() {
+      const store = appState.data.storeData;
+      const clients = store.clients_slider || [];
+
+      return `
+        <div class="space-y-4">
+          <!-- Banner Hero -->
+          <div class="bg-gradient-to-br from-teal-800 via-teal-700 to-slate-900 rounded-3xl p-5 text-white shadow-md relative overflow-hidden">
+            <div class="relative z-10 space-y-2">
+              <span class="bg-white/20 text-teal-100 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">Percetakan Modern</span>
+              <h2 class="text-xl font-black leading-tight">Cetak Kilat & Presisi Tanpa Antre</h2>
+              <p class="text-xs text-teal-100 max-w-sm">Banner MMT, Stiker Vinyl, Kartu Nama & Kebutuhan Promosi Instansi / Usaha Anda.</p>
+              <div class="pt-2 flex gap-2">
+                <button onclick="setCustTab('order')" class="bg-white text-teal-900 font-bold text-xs px-4 py-2 rounded-xl shadow hover:bg-teal-50 transition">Pesan Sekarang &rarr;</button>
+                <button onclick="setCustTab('products')" class="bg-teal-950/60 hover:bg-teal-900 text-white font-semibold text-xs px-3.5 py-2 rounded-xl border border-teal-600/40 transition">Lihat Katalog</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Slider Instansi Dipercaya -->
+          <div class="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-xs space-y-2.5">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Dipercaya Oleh Berbagai Instansi</span>
+              <span class="text-[10px] font-semibold text-teal-600">Geser Otomatis</span>
+            </div>
+            <div class="overflow-hidden py-1">
+              <div class="animate-clients gap-3">
+                ${[...clients, ...clients].map(c => `
+                  <div class="flex items-center gap-2.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl shrink-0">
+                    <img src="${c.logo}" class="w-7 h-7 rounded-lg object-cover bg-white" onerror="this.src='https://placehold.co/60x60?text=Logo'">
+                    <div>
+                      <div class="font-bold text-xs text-slate-800">${c.nama}</div>
+                      <div class="text-[9px] text-slate-500 line-clamp-1">${c.keterangan || 'Partner Cetak'}</div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+
+          <!-- Produk Populer Grid -->
+          <div class="space-y-2">
+            <div class="flex justify-between items-center px-1">
+              <h3 class="font-bold text-sm text-slate-800">Layanan & Produk Favorit</h3>
+              <button onclick="setCustTab('products')" class="text-xs font-bold text-teal-600 hover:underline">Semua Produk &rarr;</button>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              ${appState.data.products.slice(0, 4).map(p => `
+                <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:border-teal-400 transition flex flex-col justify-between">
+                  <img src="${p.Thumbnail}" class="w-full h-24 object-cover bg-slate-100" onerror="this.src='https://placehold.co/300x200?text=Produk'">
+                  <div class="p-3 flex-1 flex flex-col justify-between space-y-2">
+                    <div>
+                      <span class="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${p.Kategori === 'meteran' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'}">${p.Kategori}</span>
+                      <h4 class="font-bold text-xs text-slate-800 mt-1 line-clamp-2">${p.Nama}</h4>
+                    </div>
+                    <div class="flex justify-between items-center pt-1 border-t border-slate-100">
+                      <span class="font-extrabold text-xs text-teal-700">${formatRp(p.Harga)}</span>
+                      <button onclick="selectProductAndOrder('${p.ID}')" class="bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-bold px-2 py-1 rounded-lg">Pesan</button>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Info Toko & Rekening -->
+          <div class="bg-slate-900 text-white rounded-2xl p-4 space-y-2 text-xs">
+            <div class="font-bold text-teal-400 text-sm">${store.nama_toko || 'Alinea Desain'}</div>
+            <div class="text-slate-300">📍 ${store.alamat || '-'}</div>
+            <div class="text-slate-300">📞 WhatsApp: <span class="text-teal-300 font-bold">${store.kontak || '-'}</span></div>
+            <div class="text-slate-300">💳 Rekening: <span class="text-teal-300 font-bold">${store.rekening || '-'}</span></div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Katalog Produk
+    function viewCustProducts() {
+      return `
+        <div class="space-y-3">
+          <div class="flex justify-between items-center">
+            <h2 class="font-bold text-base text-slate-800">Katalog Produk & Biaya</h2>
+            <span class="text-xs text-slate-500">${appState.data.products.length} Layanan</span>
+          </div>
+
+          <div class="space-y-2.5">
+            ${appState.data.products.map(p => `
+              <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs flex gap-3 items-center">
+                <img src="${p.Thumbnail}" class="w-16 h-16 rounded-xl object-cover shrink-0 bg-slate-100" onerror="this.src='https://placehold.co/100x100?text=Produk'">
+                <div class="flex-1 min-w-0 space-y-1">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${p.Kategori === 'meteran' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}">${p.Kategori}</span>
+                    <h4 class="font-bold text-xs text-slate-800 truncate">${p.Nama}</h4>
+                  </div>
+                  <p class="text-[11px] text-slate-500 line-clamp-1">${p.Deskripsi || '-'}</p>
+                  <div class="flex items-center justify-between pt-1">
+                    <span class="font-black text-xs text-teal-700">${formatRp(p.Harga)}${p.Kategori==='meteran'?' / m²':''}</span>
+                    <button onclick="selectProductAndOrder('${p.ID}')" class="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-1 rounded-xl shadow-xs">Pesan Ini</button>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function selectProductAndOrder(pid) {
+      appState.selectedProductForOrder = pid;
+      appState.activeTab = 'order';
+      renderApp();
+    }
+
+    // Form Pemesanan
+    function viewCustOrder() {
+      const selectedId = appState.selectedProductForOrder || appState.data.products[0]?.ID;
+      const curProd = appState.data.products.find(p => p.ID === selectedId) || appState.data.products[0];
+      const isMeteran = curProd ? curProd.Kategori === 'meteran' : false;
+
+      return `
+        <div class="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+          <div class="border-b pb-2.5">
+            <h2 class="font-black text-sm text-slate-800">Formulir Pesan Cetak</h2>
+            <p class="text-[11px] text-slate-500">Kalkulasi harga otomatis transparan & konfirmasi langsung</p>
+          </div>
+
+          <form id="order-form" onsubmit="submitCustomerOrder(event)" class="space-y-3 text-xs">
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">Pilih Produk</label>
+              <select id="ord_prod_id" onchange="onOrderProductChange(this.value)" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold">
+                ${appState.data.products.map(p => `<option value="${p.ID}" ${p.ID === selectedId ? 'selected' : ''}>${p.Nama} - ${formatRp(p.Harga)}${p.Kategori==='meteran'?'/m²':''}</option>`).join('')}
+              </select>
+            </div>
+
+            <!-- Dimensi jika Meteran -->
+            <div id="ord_meteran_box" class="${isMeteran ? 'block' : 'hidden'} p-3 bg-teal-50 border border-teal-200 rounded-2xl space-y-2">
+              <span class="font-bold text-teal-900 block text-[11px]">Ukuran Spanduk / MMT (Panjang x Lebar)</span>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[10px] font-semibold text-teal-800">Panjang (cm)</label>
+                  <input type="number" id="ord_panjang" value="200" min="50" oninput="recalcOrder()" class="w-full p-2 bg-white border border-teal-200 rounded-xl text-center font-bold">
+                </div>
+                <div>
+                  <label class="text-[10px] font-semibold text-teal-800">Lebar (cm)</label>
+                  <input type="number" id="ord_lebar" value="100" min="50" oninput="recalcOrder()" class="w-full p-2 bg-white border border-teal-200 rounded-xl text-center font-bold">
+                </div>
+              </div>
+              <div>
+                <label class="text-[10px] font-semibold text-teal-800 block mb-1">Finishing MMT</label>
+                <select id="ord_finishing" class="w-full p-2 bg-white border border-teal-200 rounded-xl font-medium">
+                  <option value="Simkel (Mata Ayam Pojok-Pojok)">Simkel (Mata Ayam Pojok-Pojok)</option>
+                  <option value="Simkel Keliling (Per 1 Meter)">Simkel Keliling (Per 1 Meter)</option>
+                  <option value="Siming Keliling (Lipat Lem Saja Tanpa Lubang)">Siming Keliling (Lipat Lem Saja)</option>
+                  <option value="Kolong / Selongsong Bambu Kiri Kanan">Kolong / Selongsong Bambu</option>
+                  <option value="Polosan (Tanpa Finishing)">Polosan (Potong Pas Gambar)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Jumlah / Qty -->
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">Jumlah Item (Qty)</label>
+              <input type="number" id="ord_qty" value="1" min="1" oninput="recalcOrder()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold">
+            </div>
+
+            <!-- Tambahan Jasa -->
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+              <span class="font-bold text-slate-700 block text-[11px]">Tambahan Layanan / Jasa</span>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="ord_chk_desain" onchange="recalcOrder()" class="w-4 h-4 text-teal-600 rounded">
+                <span class="text-slate-700">Jasa Desain Ringkas (+Rp 15.000)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="ord_chk_cutting" onchange="recalcOrder()" class="w-4 h-4 text-teal-600 rounded">
+                <span class="text-slate-700">Jasa Potong Presisi / Cutting (+Rp 5.000)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="ord_chk_laminating" onchange="recalcOrder()" class="w-4 h-4 text-teal-600 rounded">
+                <span class="text-slate-700">Laminasi Doff / Glossy (+Rp 5.000)</span>
+              </label>
+            </div>
+
+            <!-- Opsi Pembayaran (Lunas atau DP) -->
+            <div class="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
+              <span class="font-bold text-amber-900 block text-[11px]">Skema Pembayaran</span>
+              <div class="flex gap-4">
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="ord_tipe_bayar" value="lunas" checked onchange="toggleDpInput()" class="text-teal-600">
+                  <span class="font-semibold text-slate-700">Bayar Penuh / Lunas</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="ord_tipe_bayar" value="dp" onchange="toggleDpInput()" class="text-teal-600">
+                  <span class="font-semibold text-slate-700">Uang Muka (DP)</span>
+                </label>
+              </div>
+              <div id="ord_dp_box" class="hidden pt-1">
+                <label class="text-[10px] font-bold text-amber-900">Nominal DP (Rp)</label>
+                <input type="number" id="ord_dp_nominal" placeholder="Contoh: 50000" oninput="recalcOrder()" class="w-full p-2 bg-white border border-amber-300 rounded-xl font-bold">
+                <p id="ord_sisa_pelunasan_text" class="text-[10px] text-amber-800 font-semibold mt-1"></p>
+              </div>
+            </div>
+
+            <!-- Catatan Pesanan -->
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">Catatan Tambahan (Opsional)</label>
+              <textarea id="ord_catatan" rows="2" placeholder="Tuliskan keterangan warna, tulisan, atau deadline..." class="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl"></textarea>
+            </div>
+
+            <!-- Kalkulasi Total Real-Time -->
+            <div class="p-3.5 bg-slate-900 text-white rounded-2xl space-y-1">
+              <div class="flex justify-between text-slate-400 text-[11px]">
+                <span>Biaya Cetak Produk:</span>
+                <span id="calc-subtotal">Rp 0</span>
+              </div>
+              <div class="flex justify-between text-slate-400 text-[11px]">
+                <span>Biaya Jasa & Tambahan:</span>
+                <span id="calc-jasa">Rp 0</span>
+              </div>
+              <div class="flex justify-between text-white font-black text-sm pt-1 border-t border-slate-800">
+                <span>Total Tagihan:</span>
+                <span id="calc-total" class="text-teal-400">Rp 0</span>
+              </div>
+            </div>
+
+            <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-extrabold py-3 rounded-2xl shadow-md transition flex items-center justify-center gap-2">
+              <span>Kirim Pesanan Sekarang</span>
+            </button>
+          </form>
+        </div>
+      `;
+    }
+
+    function onOrderProductChange(pid) {
+      appState.selectedProductForOrder = pid;
+      const prod = appState.data.products.find(p => p.ID === pid);
+      const isMet = prod ? prod.Kategori === 'meteran' : false;
+      const metBox = document.getElementById('ord_meteran_box');
+      if (metBox) {
+        if (isMet) metBox.classList.remove('hidden');
+        else metBox.classList.add('hidden');
+      }
+      recalcOrder();
+    }
+
+    function toggleDpInput() {
+      const isDp = document.querySelector('input[name="ord_tipe_bayar"]:checked')?.value === 'dp';
+      const dpBox = document.getElementById('ord_dp_box');
+      if (dpBox) {
+        if (isDp) dpBox.classList.remove('hidden');
+        else dpBox.classList.add('hidden');
+      }
+      recalcOrder();
+    }
+
+    function recalcOrder() {
+      const pid = document.getElementById('ord_prod_id')?.value;
+      const prod = appState.data.products.find(p => p.ID === pid);
+      if (!prod) return;
+
+      const qty = Number(document.getElementById('ord_qty')?.value || 1);
+      let subtotal = 0;
+
+      if (prod.Kategori === 'meteran') {
+        const p = Number(document.getElementById('ord_panjang')?.value || 200);
+        const l = Number(document.getElementById('ord_lebar')?.value || 100);
+        const luas = Math.max(1, (p / 100) * (l / 100));
+        subtotal = Math.round(prod.Harga * luas * qty);
+      } else {
+        subtotal = prod.Harga * qty;
+      }
+
+      let jasa = 0;
+      if (document.getElementById('ord_chk_desain')?.checked) jasa += (prod.HargaDesain || 15000);
+      if (document.getElementById('ord_chk_cutting')?.checked) jasa += (prod.HargaCutting || 5000);
+      if (document.getElementById('ord_chk_laminating')?.checked) jasa += (prod.HargaLaminating || 5000);
+
+      const total = subtotal + jasa;
+      const elSub = document.getElementById('calc-subtotal');
+      const elJas = document.getElementById('calc-jasa');
+      const elTot = document.getElementById('calc-total');
+
+      if (elSub) elSub.textContent = formatRp(subtotal);
+      if (elJas) elJas.textContent = formatRp(jasa);
+      if (elTot) elTot.textContent = formatRp(total);
+
+      const isDp = document.querySelector('input[name="ord_tipe_bayar"]:checked')?.value === 'dp';
+      const dpNominal = Number(document.getElementById('ord_dp_nominal')?.value || 0);
+      const sisaText = document.getElementById('ord_sisa_pelunasan_text');
+      if (sisaText && isDp) {
+        const sisa = Math.max(0, total - dpNominal);
+        sisaText.textContent = `Sisa pelunasan saat jadi: ${formatRp(sisa)}`;
+      }
+    }
+
+    // Submit Order Customer
+    async function submitCustomerOrder(e) {
+      e.preventDefault();
+      if (!appState.currentUser) {
+        openLoginPortal();
+        showToast('Silakan masuk terlebih dahulu!', 'warning');
+        return;
+      }
+
+      const pid = document.getElementById('ord_prod_id').value;
+      const prod = appState.data.products.find(p => p.ID === pid);
+      const qty = Number(document.getElementById('ord_qty').value || 1);
+      const p = Number(document.getElementById('ord_panjang')?.value || 0);
+      const l = Number(document.getElementById('ord_lebar')?.value || 0);
+      const finishing = document.getElementById('ord_finishing')?.value || '-';
+      const jasaDesain = document.getElementById('ord_chk_desain').checked ? (prod.HargaDesain || 15000) : 0;
+      const jasaCutting = document.getElementById('ord_chk_cutting').checked ? (prod.HargaCutting || 5000) : 0;
+      const jasaLaminating = document.getElementById('ord_chk_laminating').checked ? (prod.HargaLaminating || 5000) : 0;
+
+      let subtotal = prod.Harga * qty;
+      if (prod.Kategori === 'meteran') {
+        const luas = Math.max(1, (p / 100) * (l / 100));
+        subtotal = Math.round(prod.Harga * luas * qty);
+      }
+      const totalHarga = subtotal + jasaDesain + jasaCutting + jasaLaminating;
+
+      const isDp = document.querySelector('input[name="ord_tipe_bayar"]:checked')?.value === 'dp';
+      const dp = isDp ? Number(document.getElementById('ord_dp_nominal')?.value || 0) : 0;
+      const statusBayar = isDp ? (dp >= totalHarga ? 'Lunas' : 'DP Terbayar') : 'Belum Lunas';
+      const catatan = document.getElementById('ord_catatan').value || '';
+
+      const newOrder = {
+        ID: 'ORD' + Date.now().toString().slice(-6),
+        Tgl: new Date().toISOString(),
+        KodeCustomer: appState.currentUser.KodeKhusus,
+        NamaCustomer: appState.currentUser.Nama,
+        NoCustomer: appState.currentUser.NoWA,
+        IDProduk: prod.ID,
+        NamaProduk: prod.Nama,
+        Kategori: prod.Kategori,
+        Qty: qty,
+        Panjang: p,
+        Lebar: l,
+        Finishing: finishing,
+        JasaCutting: jasaCutting,
+        JasaLaminating: jasaLaminating,
+        JasaDesain: jasaDesain,
+        TotalHarga: totalHarga,
+        StatusBayar: statusBayar,
+        StatusOrder: 'Order Masuk',
+        DP: dp,
+        Catatan: catatan
+      };
+
+      // Simpan lokal
+      appState.data.orders.unshift(newOrder);
+      saveLocal(appState.data);
+
+      // Kirim ke Google Apps Script backend jika tersedia
+      if (isGas) {
+        google.script.run.addOrder(newOrder);
+      }
+
+      showToast('Pesanan berhasil dibuat!');
+      openOrderDetailModal(newOrder.ID);
+      appState.activeTab = 'profile';
+      renderApp();
+    }
+
+    // Profil & Riwayat Pesanan
+    function viewCustProfile() {
+      const u = appState.currentUser;
+      const myOrders = (appState.data.orders || []).filter(o => o.KodeCustomer === u.KodeKhusus || o.NamaCustomer === u.Nama);
+
+      return `
+        <div class="space-y-4">
+          <!-- Card User -->
+          <div class="bg-gradient-to-r from-teal-800 to-slate-900 rounded-3xl p-5 text-white shadow-md flex items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center font-black text-2xl text-teal-300">
+              ${u.Nama.charAt(0)}
+            </div>
+            <div class="flex-1 min-w-0">
+              <h2 class="font-extrabold text-base truncate">${u.Nama}</h2>
+              <p class="text-xs text-teal-200">${u.NoWA || '-'}</p>
+              <div class="inline-block bg-teal-950/80 px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold mt-1.5 border border-teal-600">
+                ID Customer: ${u.KodeKhusus}
+              </div>
+            </div>
+          </div>
+
+          <!-- Riwayat Pesanan -->
+          <div class="space-y-2">
+            <div class="flex justify-between items-center px-1">
+              <h3 class="font-bold text-sm text-slate-800">Riwayat Pesanan Saya</h3>
+              <span class="text-xs text-slate-500">${myOrders.length} Pesanan</span>
+            </div>
+
+            ${myOrders.length === 0 ? `
+              <div class="text-center py-10 bg-white rounded-3xl border border-dashed border-slate-200 text-slate-400 text-xs">
+                Belum ada riwayat pesanan.
+              </div>
+            ` : ''}
+
+            <div class="space-y-2.5">
+              ${myOrders.map(o => `
+                <div onclick="openOrderDetailModal('${o.ID}')" class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs hover:border-teal-500 transition cursor-pointer space-y-2">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <div class="text-[10px] font-mono text-slate-400 font-semibold">${o.ID} • ${new Date(o.Tgl).toLocaleDateString('id-ID')}</div>
+                      <h4 class="font-bold text-xs text-slate-800 mt-0.5">${o.NamaProduk}</h4>
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                      <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded ${o.StatusOrder==='Selesai'?'bg-emerald-100 text-emerald-800':(o.StatusOrder==='Proses'?'bg-amber-100 text-amber-800':'bg-blue-100 text-blue-800')}">${o.StatusOrder}</span>
+                      <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded ${o.StatusBayar==='Lunas'?'bg-teal-100 text-teal-800':'bg-rose-100 text-rose-800'}">${o.StatusBayar}</span>
+                    </div>
+                  </div>
+                  <div class="flex justify-between items-center pt-2 border-t border-slate-100 text-xs">
+                    <span class="text-slate-500">${o.Qty} pcs ${o.Kategori==='meteran'?`(${o.Panjang}x${o.Lebar} cm)`:''}</span>
+                    <span class="font-extrabold text-teal-700">${formatRp(o.TotalHarga)} &rarr;</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Modal Detail Pesanan & Cetak Struk
+    function openOrderDetailModal(orderId) {
+      const o = appState.data.orders.find(x => x.ID === orderId);
+      if (!o) return;
+
+      const store = appState.data.storeData;
+      const isMet = o.Kategori === 'meteran';
+      const luas = isMet ? Math.max(1, ((o.Panjang||100)/100) * ((o.Lebar||100)/100)) : 0;
+      const subtotalProduk = o.TotalHarga - (o.JasaDesain||0) - (o.JasaCutting||0) - (o.JasaLaminating||0);
+      const sisa = Math.max(0, o.TotalHarga - (o.DP||0));
+
+      const phone = (store.kontak || '081234567890').replace(/[^0-9]/g, '').replace(/^0/, '62');
+      const waMsg = encodeURIComponent(`Halo ${store.nama_toko}, saya konfirmasi pesanan:\nNo: ${o.ID}\nNama: ${o.NamaCustomer}\nProduk: ${o.NamaProduk} (${o.Qty} item)\nTotal: ${formatRp(o.TotalHarga)}\nStatus: ${o.StatusOrder}`);
+
+      Swal.fire({
+        title: `<span class="text-sm font-black text-slate-800">Detail Pesanan #${o.ID}</span>`,
+        html: `
+          <div class="text-left text-xs space-y-3 px-1 max-h-[70vh] overflow-y-auto">
+            <div class="flex justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+              <div>
+                <div class="text-[10px] text-slate-400">Status Pengerjaan</div>
+                <span class="font-bold px-2 py-0.5 rounded text-[11px] ${o.StatusOrder==='Selesai'?'bg-emerald-100 text-emerald-700':'bg-blue-100 text-blue-700'}">${o.StatusOrder}</span>
+              </div>
+              <div class="text-right">
+                <div class="text-[10px] text-slate-400">Status Pembayaran</div>
+                <span class="font-bold px-2 py-0.5 rounded text-[11px] ${o.StatusBayar==='Lunas'?'bg-teal-100 text-teal-700':'bg-rose-100 text-rose-700'}">${o.StatusBayar}</span>
+              </div>
+            </div>
+
+            <div class="p-3 bg-teal-50 rounded-2xl border border-teal-100 space-y-1 text-slate-700">
+              <div><strong>Produk:</strong> ${o.NamaProduk}</div>
+              <div><strong>Jumlah:</strong> ${o.Qty} item (${o.Kategori})</div>
+              ${isMet ? `<div><strong>Ukuran:</strong> ${o.Panjang} x ${o.Lebar} cm (${luas.toFixed(2)} m²)</div>` : ''}
+              ${isMet ? `<div><strong>Finishing:</strong> ${o.Finishing || '-'}</div>` : ''}
+              ${o.Catatan ? `<div><strong>Catatan:</strong> ${o.Catatan}</div>` : ''}
+            </div>
+
+            <div class="p-3 bg-white rounded-2xl border border-slate-200 space-y-1.5 text-slate-600">
+              <div class="font-bold text-slate-800 text-[11px] border-b pb-1">Rincian Tagihan:</div>
+              <div class="flex justify-between"><span>Biaya Cetak Produk:</span><span>${formatRp(subtotalProduk)}</span></div>
+              ${o.JasaDesain > 0 ? `<div class="flex justify-between text-teal-700"><span>Jasa Desain:</span><span>+${formatRp(o.JasaDesain)}</span></div>` : ''}
+              ${o.JasaCutting > 0 ? `<div class="flex justify-between text-teal-700"><span>Jasa Potong/Cutting:</span><span>+${formatRp(o.JasaCutting)}</span></div>` : ''}
+              ${o.JasaLaminating > 0 ? `<div class="flex justify-between text-teal-700"><span>Jasa Laminasi:</span><span>+${formatRp(o.JasaLaminating)}</span></div>` : ''}
+              <div class="flex justify-between font-black text-sm text-slate-900 pt-1 border-t"><span>Total:</span><span class="text-teal-700">${formatRp(o.TotalHarga)}</span></div>
+              ${o.DP > 0 ? `<div class="flex justify-between text-amber-800"><span>Uang Muka (DP):</span><span>-${formatRp(o.DP)}</span></div>` : ''}
+              ${o.DP > 0 ? `<div class="flex justify-between font-bold text-rose-700"><span>Sisa Pelunasan:</span><span>${formatRp(sisa)}</span></div>` : ''}
+            </div>
+
+            <div class="p-3 bg-slate-900 text-white rounded-2xl space-y-1">
+              <div class="text-[10px] text-slate-400">Rekening Transfer:</div>
+              <div class="font-mono text-xs font-bold text-teal-300">${store.rekening || '-'}</div>
+            </div>
+
+            <div class="flex gap-2 pt-1">
+              <button onclick="printNota('${o.ID}')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5">
+                <span>🖨️ Cetak Nota</span>
+              </button>
+              <a href="https://wa.me/${phone}?text=${waMsg}" target="_blank" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5 text-center">
+                <span>💬 WhatsApp CS</span>
+              </a>
+            </div>
+          </div>
+        `,
+        showConfirmButton: false,
+        showCloseButton: true
+      });
+    }
+
+    function printNota(orderId) {
+      const o = appState.data.orders.find(x => x.ID === orderId);
+      if (!o) return;
+      const store = appState.data.storeData;
+
+      const printWin = window.open('', '_blank', 'width=380,height=600');
+      printWin.document.write(`
+        <html>
+        <head>
+          <title>Nota #${o.ID}</title>
+          <style>
+            body { font-family: monospace; font-size: 12px; margin: 15px; color: #000; }
+            .center { text-align: center; }
+            .line { border-top: 1px dashed #000; margin: 8px 0; }
+            .flex { display: flex; justify-content: space-between; }
+            .bold { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="center bold">${store.nama_toko || 'ALINEA DESAIN'}</div>
+          <div class="center">${store.alamat || '-'}</div>
+          <div class="center">WA: ${store.kontak || '-'}</div>
+          <div class="line"></div>
+          <div class="flex"><span>No: ${o.ID}</span><span>${new Date(o.Tgl).toLocaleDateString('id-ID')}</span></div>
+          <div class="flex"><span>Cust: ${o.NamaCustomer}</span><span>${o.NoCustomer}</span></div>
+          <div class="line"></div>
+          <div class="bold">${o.NamaProduk}</div>
+          <div class="flex"><span>${o.Qty} x ${formatRp(o.TotalHarga / o.Qty)}</span><span>${formatRp(o.TotalHarga)}</span></div>
+          ${o.Kategori==='meteran'?`<div>Ukuran: ${o.Panjang}x${o.Lebar} cm</div>`:''}
+          ${o.Finishing?`<div>Finishing: ${o.Finishing}</div>`:''}
+          <div class="line"></div>
+          <div class="flex bold"><span>TOTAL</span><span>${formatRp(o.TotalHarga)}</span></div>
+          ${o.DP > 0 ? `<div class="flex"><span>DP TERBAYAR</span><span>${formatRp(o.DP)}</span></div>`:''}
+          <div class="flex"><span>STATUS BAYAR</span><span>${o.StatusBayar}</span></div>
+          <div class="line"></div>
+          <div class="center">Terima kasih atas pesanan Anda!</div>
+          <script>window.print();<\/script>
+        </body>
+        </html>
+      `);
+      printWin.document.close();
+    }
+
+    // ================= ADMIN VIEW =================
+    function renderAdminNav() {
+      const nav = document.getElementById('bottom-nav');
+      const tabs = [
+        { id: 'dashboard', label: 'Dashboard', icon: 'M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z' },
+        { id: 'transaksi', label: 'Transaksi', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
+        { id: 'customer', label: 'Pelanggan', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
+        { id: 'produk', label: 'Produk', icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4' },
+        { id: 'toko', label: 'Toko & Brand', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' }
+      ];
+
+      nav.innerHTML = tabs.map(t => {
+        const active = appState.adminTab === t.id;
+        return `
+          <button onclick="setAdminTab('${t.id}')" class="flex flex-col items-center py-1 flex-1 ${active ? 'text-amber-500 font-bold' : 'text-slate-400 font-medium'}">
+            <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="${active ? 2.5 : 1.8}"><path stroke-linecap="round" stroke-linejoin="round" d="${t.icon}"></path></svg>
+            <span class="text-[9px] leading-none">${t.label}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function setAdminTab(tab) {
+      appState.adminTab = tab;
+      renderApp();
+    }
+
+    function renderAdminContent() {
+      const main = document.getElementById('main-content');
+      if (appState.adminTab === 'dashboard') main.innerHTML = viewAdminDashboard();
+      else if (appState.adminTab === 'transaksi') main.innerHTML = viewAdminTransaksi();
+      else if (appState.adminTab === 'customer') main.innerHTML = viewAdminCustomer();
+      else if (appState.adminTab === 'produk') main.innerHTML = viewAdminProduk();
+      else if (appState.adminTab === 'toko') main.innerHTML = viewAdminToko();
+    }
+
+    function viewAdminDashboard() {
+      const orders = appState.data.orders || [];
+      const expenses = appState.data.expenses || [];
+
+      const totalOmset = orders.reduce((sum, o) => sum + (Number(o.TotalHarga) || 0), 0);
+      const totalPengeluaran = expenses.reduce((sum, e) => sum + (Number(e.Total) || 0), 0);
+      const labaBersih = totalOmset - totalPengeluaran;
+
+      return `
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <h2 class="font-black text-base text-slate-800">Ringkasan Administrator</h2>
+            <span class="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-lg">Panel Kontrol</span>
+          </div>
+
+          <!-- Cards Omset & Laba -->
+          <div class="grid grid-cols-3 gap-2.5">
+            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
+              <span class="text-[10px] font-bold text-emerald-800 block">Total Omset</span>
+              <span class="font-black text-xs text-emerald-900 mt-1 block">${formatRp(totalOmset)}</span>
+            </div>
+            <div class="bg-rose-50 border border-rose-200 rounded-2xl p-3">
+              <span class="text-[10px] font-bold text-rose-800 block">Pengeluaran</span>
+              <span class="font-black text-xs text-rose-900 mt-1 block">${formatRp(totalPengeluaran)}</span>
+            </div>
+            <div class="bg-teal-50 border border-teal-200 rounded-2xl p-3">
+              <span class="text-[10px] font-bold text-teal-800 block">Laba Bersih</span>
+              <span class="font-black text-xs text-teal-900 mt-1 block">${formatRp(labaBersih)}</span>
+            </div>
+          </div>
+
+          <!-- Tombol Cepat Kasir -->
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="openModalCatatPengeluaran()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-3 rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-xs">
+              <span>+ Catat Biaya/Bahan</span>
+            </button>
+            <button onclick="openModalTambahProduk()" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-3 rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-xs">
+              <span>+ Tambah Produk Baru</span>
+            </button>
+          </div>
+
+          <!-- Pesanan Terbaru -->
+          <div class="space-y-2">
+            <h3 class="font-bold text-xs text-slate-700 uppercase tracking-wider">Pesanan Terbaru Masuk</h3>
+            <div class="space-y-2">
+              ${orders.slice(0, 5).map(o => `
+                <div onclick="openOrderDetailModal('${o.ID}')" class="bg-white p-3 rounded-2xl border border-slate-200 flex justify-between items-center cursor-pointer hover:border-teal-500 transition">
+                  <div>
+                    <div class="font-bold text-xs text-slate-800">${o.NamaCustomer} (${o.NamaProduk})</div>
+                    <div class="text-[10px] text-slate-400 font-mono">${o.ID} • ${o.StatusOrder}</div>
+                  </div>
+                  <div class="text-right">
+                    <span class="font-extrabold text-xs text-teal-700 block">${formatRp(o.TotalHarga)}</span>
+                    <span class="text-[9px] font-bold px-1.5 py-0.2 rounded ${o.StatusBayar==='Lunas'?'bg-emerald-100 text-emerald-700':'bg-rose-100 text-rose-700'}">${o.StatusBayar}</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Transaksi (Pesanan & Pengeluaran)
+    function viewAdminTransaksi() {
+      const orders = appState.data.orders || [];
+      const expenses = appState.data.expenses || [];
+
+      return `
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <h2 class="font-black text-base text-slate-800">Manajemen Transaksi</h2>
+            <button onclick="openModalCatatPengeluaran()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-xs">+ Catat Biaya</button>
+          </div>
+
+          <!-- Tab Pesanan -->
+          <div class="space-y-2">
+            <h3 class="font-bold text-xs text-slate-700 uppercase tracking-wider">Daftar Semua Pesanan (${orders.length})</h3>
+            <div class="space-y-2">
+              ${orders.map(o => `
+                <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
+                  <div class="flex justify-between items-start">
+                    <div>
+                      <div class="text-[10px] font-mono text-slate-400">${o.ID} • ${new Date(o.Tgl).toLocaleDateString('id-ID')}</div>
+                      <h4 class="font-bold text-xs text-slate-800">${o.NamaCustomer} - ${o.NamaProduk}</h4>
+                      <p class="text-[10px] text-slate-500">WA: ${o.NoCustomer}</p>
+                    </div>
+                    <div class="text-right">
+                      <span class="font-black text-xs text-teal-700 block">${formatRp(o.TotalHarga)}</span>
+                      <select onchange="updateOrderStatusGAS('${o.ID}', this.value)" class="text-[10px] font-bold p-1 rounded bg-slate-100 border border-slate-300 mt-1">
+                        <option value="Order Masuk" ${o.StatusOrder==='Order Masuk'?'selected':''}>Order Masuk</option>
+                        <option value="Proses" ${o.StatusOrder==='Proses'?'selected':''}>Proses</option>
+                        <option value="Siap Diambil" ${o.StatusOrder==='Siap Diambil'?'selected':''}>Siap Diambil</option>
+                        <option value="Selesai" ${o.StatusOrder==='Selesai'?'selected':''}>Selesai</option>
+                        <option value="Dibatalkan" ${o.StatusOrder==='Dibatalkan'?'selected':''}>Dibatalkan</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="flex justify-between items-center pt-2 border-t border-slate-100">
+                    <select onchange="updateOrderBayarGAS('${o.ID}', this.value)" class="text-[10px] font-bold p-1 rounded ${o.StatusBayar==='Lunas'?'bg-emerald-100 text-emerald-800':'bg-rose-100 text-rose-800'} border">
+                      <option value="Belum Lunas" ${o.StatusBayar==='Belum Lunas'?'selected':''}>Belum Lunas</option>
+                      <option value="DP Terbayar" ${o.StatusBayar==='DP Terbayar'?'selected':''}>DP Terbayar</option>
+                      <option value="Lunas" ${o.StatusBayar==='Lunas'?'selected':''}>Lunas</option>
+                    </select>
+                    <button onclick="openOrderDetailModal('${o.ID}')" class="text-xs font-bold text-teal-600 hover:underline">Detail & Nota &rarr;</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Pengeluaran Kas Toko -->
+          <div class="space-y-2 pt-2 border-t">
+            <h3 class="font-bold text-xs text-slate-700 uppercase tracking-wider">Pengeluaran Operasional / Bahan (${expenses.length})</h3>
+            <div class="space-y-2">
+              ${expenses.map(e => `
+                <div class="bg-rose-50/50 p-3 rounded-2xl border border-rose-100 flex justify-between items-center text-xs">
+                  <div>
+                    <span class="font-bold text-slate-800">${e.Detail}</span>
+                    <p class="text-[10px] text-slate-500">${e.Toko} • ${e.Tgl}</p>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-black text-rose-700">${formatRp(e.Total)}</span>
+                    <button onclick="deleteExpenseGAS('${e.ID}')" class="text-rose-600 hover:text-rose-800 font-bold text-[10px]">Hapus</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateOrderStatusGAS(orderId, status) {
+      const ord = appState.data.orders.find(o => o.ID === orderId);
+      if (ord) ord.StatusOrder = status;
+      saveLocal(appState.data);
+      if (isGas) google.script.run.updateOrderStatus(orderId, status, ord?.NoCustomer || '', '');
+      showToast(`Status #${orderId} diubah ke ${status}`);
+    }
+
+    function updateOrderBayarGAS(orderId, statusBayar) {
+      const ord = appState.data.orders.find(o => o.ID === orderId);
+      if (ord) ord.StatusBayar = statusBayar;
+      saveLocal(appState.data);
+      if (isGas) google.script.run.updateOrderBayar(orderId, statusBayar);
+      showToast(`Status bayar diubah ke ${statusBayar}`);
+      renderApp();
+    }
+
+    // Modal Catat Pengeluaran
+    function openModalCatatPengeluaran() {
+      Swal.fire({
+        title: '<span class="text-sm font-black">Catat Pengeluaran Kas Toko</span>',
+        html: `
+          <div class="space-y-2.5 text-left text-xs">
+            <div>
+              <label class="font-bold">Total Pengeluaran (Rp)</label>
+              <input type="number" id="swal_exp_total" placeholder="Contoh: 150000" class="w-full p-2 border rounded-xl mt-1">
+            </div>
+            <div>
+              <label class="font-bold">Toko / Supplier</label>
+              <input type="text" id="swal_exp_toko" placeholder="Contoh: CV Bahan Grafindo" class="w-full p-2 border rounded-xl mt-1">
+            </div>
+            <div>
+              <label class="font-bold">Keterangan / Beli Apa</label>
+              <input type="text" id="swal_exp_detail" placeholder="Contoh: Beli 1 roll MMT 280gr" class="w-full p-2 border rounded-xl mt-1">
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Simpan',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#e11d48',
+        preConfirm: () => {
+          const total = Number(document.getElementById('swal_exp_total').value || 0);
+          const toko = document.getElementById('swal_exp_toko').value;
+          const detail = document.getElementById('swal_exp_detail').value;
+          if (!total || !detail) {
+            Swal.showValidationMessage('Mohon isi nominal dan keterangan');
+            return false;
+          }
+          return { total, toko, detail };
+        }
+      }).then(res => {
+        if (res.isConfirmed) {
+          const newExp = {
+            ID: 'EXP' + Date.now().toString().slice(-6),
+            Tgl: new Date().toISOString().split('T')[0],
+            Total: res.value.total,
+            Toko: res.value.toko || 'Toko Bahan',
+            Detail: res.value.detail,
+            NotaUrl: ''
+          };
+          appState.data.expenses.unshift(newExp);
+          saveLocal(appState.data);
+          if (isGas) google.script.run.addExpense(newExp);
+          showToast('Pengeluaran berhasil dicatat!');
+          renderApp();
+        }
+      });
+    }
+
+    function deleteExpenseGAS(expId) {
+      appState.data.expenses = appState.data.expenses.filter(e => e.ID !== expId);
+      saveLocal(appState.data);
+      if (isGas) google.script.run.deleteExpense(expId);
+      showToast('Pengeluaran dihapus');
+      renderApp();
+    }
+
+    // Modal Tambah Produk
+    function openModalTambahProduk() {
+      Swal.fire({
+        title: '<span class="text-sm font-black">Tambah Produk Baru</span>',
+        html: `
+          <div class="space-y-2.5 text-left text-xs">
+            <div>
+              <label class="font-bold">Nama Produk</label>
+              <input type="text" id="swal_p_nama" placeholder="Contoh: Spanduk Kain TC" class="w-full p-2 border rounded-xl mt-1">
+            </div>
+            <div>
+              <label class="font-bold">Kategori Produk</label>
+              <select id="swal_p_kat" class="w-full p-2 border rounded-xl mt-1">
+                <option value="meteran">Meteran (MMT, Spanduk)</option>
+                <option value="satuan">Satuan (Stiker, Box, Banner)</option>
+              </select>
+            </div>
+            <div>
+              <label class="font-bold">Harga Jual (Rp)</label>
+              <input type="number" id="swal_p_harga" placeholder="Contoh: 25000" class="w-full p-2 border rounded-xl mt-1">
+            </div>
+            <div>
+              <label class="font-bold">URL Foto Thumbnail</label>
+              <input type="text" id="swal_p_foto" placeholder="https://..." class="w-full p-2 border rounded-xl mt-1">
+            </div>
+            <div>
+              <label class="font-bold">Deskripsi Singkat</label>
+              <textarea id="swal_p_desc" rows="2" class="w-full p-2 border rounded-xl mt-1"></textarea>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Simpan Produk',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#0d9488',
+        preConfirm: () => {
+          const nama = document.getElementById('swal_p_nama').value;
+          const kat = document.getElementById('swal_p_kat').value;
+          const harga = Number(document.getElementById('swal_p_harga').value || 0);
+          const foto = document.getElementById('swal_p_foto').value || 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=400&auto=format&fit=crop&q=80';
+          const desc = document.getElementById('swal_p_desc').value;
+          if (!nama || !harga) {
+            Swal.showValidationMessage('Nama dan harga wajib diisi');
+            return false;
+          }
+          return { nama, kat, harga, foto, desc };
+        }
+      }).then(res => {
+        if (res.isConfirmed) {
+          const newP = {
+            ID: 'P' + Date.now().toString().slice(-4),
+            Nama: res.value.nama,
+            Kategori: res.value.kat,
+            Harga: res.value.harga,
+            Thumbnail: res.value.foto,
+            Deskripsi: res.value.desc,
+            Terjual: 0,
+            HargaDesain: 15000,
+            HargaCutting: 5000,
+            HargaLaminating: 0
+          };
+          appState.data.products.push(newP);
+          saveLocal(appState.data);
+          if (isGas) google.script.run.addProduct(newP);
+          showToast('Produk baru berhasil disimpan!');
+          renderApp();
+        }
+      });
+    }
+
+    // Manajemen Produk
+    function viewAdminProduk() {
+      return `
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <h2 class="font-black text-base text-slate-800">Katalog Produk</h2>
+            <button onclick="openModalTambahProduk()" class="bg-teal-600 hover:bg-teal-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs shadow-xs">+ Produk Baru</button>
+          </div>
+
+          <div class="space-y-2.5">
+            ${appState.data.products.map(p => `
+              <div class="bg-white p-3 rounded-2xl border border-slate-200 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                  <img src="${p.Thumbnail}" class="w-12 h-12 rounded-xl object-cover bg-slate-100" onerror="this.src='https://placehold.co/80x80?text=P'">
+                  <div>
+                    <span class="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded ${p.Kategori==='meteran'?'bg-indigo-100 text-indigo-700':'bg-emerald-100 text-emerald-700'}">${p.Kategori}</span>
+                    <h4 class="font-bold text-xs text-slate-800">${p.Nama}</h4>
+                    <span class="font-black text-teal-700 text-xs">${formatRp(p.Harga)}</span>
+                  </div>
+                </div>
+                <button onclick="deleteProductGAS('${p.ID}')" class="text-rose-600 hover:text-rose-800 font-bold text-xs p-2">Hapus</button>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function deleteProductGAS(pid) {
+      if (confirm('Yakin ingin menghapus produk ini?')) {
+        appState.data.products = appState.data.products.filter(p => p.ID !== pid);
+        saveLocal(appState.data);
+        if (isGas) google.script.run.deleteProduct(pid);
+        showToast('Produk dihapus');
+        renderApp();
+      }
+    }
+
+    // Daftar Pelanggan
+    function viewAdminCustomer() {
+      const customers = (appState.data.users || []).filter(u => u.Role === 'customer');
+
+      return `
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <h2 class="font-black text-base text-slate-800">Daftar Customer Terdaftar</h2>
+            <span class="text-xs text-slate-500">${customers.length} Pelanggan</span>
+          </div>
+
+          <div class="space-y-2.5">
+            ${customers.map(c => `
+              <div class="bg-white p-3.5 rounded-2xl border border-slate-200 flex justify-between items-center shadow-xs">
+                <div>
+                  <h4 class="font-bold text-xs text-slate-800">${c.Nama}</h4>
+                  <p class="text-[10px] text-slate-500">ID: <span class="font-mono font-bold">${c.KodeKhusus}</span> • Alamat: ${c.Alamat || '-'}</p>
+                  <p class="text-[10px] text-teal-700 font-bold">WA: ${c.NoWA}</p>
+                </div>
+                <a href="https://wa.me/${c.NoWA.replace(/[^0-9]/g,'').replace(/^0/,'62')}" target="_blank" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs">Chat WA</a>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Pengaturan Toko & Branding
+    function viewAdminToko() {
+      const store = appState.data.storeData;
+
+      return `
+        <div class="space-y-4">
+          <div class="border-b pb-2">
+            <h2 class="font-black text-base text-slate-800">Pengaturan Toko & Branding</h2>
+            <p class="text-[11px] text-slate-500">Identitas logo, nama percetakan, running text & rekening</p>
+          </div>
+
+          <form onsubmit="saveStoreSettings(event)" class="bg-white p-4 rounded-3xl border border-slate-200 shadow-xs space-y-3 text-xs">
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">Nama Toko</label>
+              <input type="text" id="cfg_nama_toko" value="${store.nama_toko || ''}" class="w-full p-2 bg-slate-50 border rounded-xl font-bold">
+            </div>
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">Slogan / Tagline Toko</label>
+              <input type="text" id="cfg_tagline" value="${store.tagline || ''}" class="w-full p-2 bg-slate-50 border rounded-xl">
+            </div>
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">URL Logo Toko</label>
+              <input type="text" id="cfg_logo_url" value="${store.logo_url || ''}" placeholder="https://..." class="w-full p-2 bg-slate-50 border rounded-xl">
+            </div>
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">Teks Pengumuman (Running Text)</label>
+              <textarea id="cfg_running_text" rows="2" class="w-full p-2 bg-slate-50 border rounded-xl">${store.running_text || ''}</textarea>
+            </div>
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">Alamat Toko</label>
+              <textarea id="cfg_alamat" rows="2" class="w-full p-2 bg-slate-50 border rounded-xl">${store.alamat || ''}</textarea>
+            </div>
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">No. WhatsApp Toko</label>
+              <input type="text" id="cfg_kontak" value="${store.kontak || ''}" class="w-full p-2 bg-slate-50 border rounded-xl font-bold">
+            </div>
+            <div>
+              <label class="font-bold text-slate-700 block mb-1">Informasi Rekening Bank</label>
+              <input type="text" id="cfg_rekening" value="${store.rekening || ''}" class="w-full p-2 bg-slate-50 border rounded-xl font-bold">
+            </div>
+
+            <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-extrabold py-3 rounded-2xl shadow-md transition">
+              Simpan Identitas & Logo Toko
+            </button>
+          </form>
+        </div>
+      `;
+    }
+
+    function saveStoreSettings(e) {
+      e.preventDefault();
+      const s = appState.data.storeData;
+      s.nama_toko = document.getElementById('cfg_nama_toko').value;
+      s.tagline = document.getElementById('cfg_tagline').value;
+      s.logo_url = document.getElementById('cfg_logo_url').value;
+      s.running_text = document.getElementById('cfg_running_text').value;
+      s.alamat = document.getElementById('cfg_alamat').value;
+      s.kontak = document.getElementById('cfg_kontak').value;
+      s.rekening = document.getElementById('cfg_rekening').value;
+
+      saveLocal(appState.data);
+      if (isGas) google.script.run.saveAllStoreData(s);
+      showToast('Informasi toko berhasil disimpan!');
+      renderApp();
+    }
+
+    // ================= AUTENTIKASI (LOGIN PORTAL) =================
+    function openLoginPortal(defaultRole = 'customer') {
+      Swal.fire({
+        title: '<span class="text-sm font-black">Portal Masuk Alinea Desain</span>',
+        html: `
+          <div class="text-left text-xs space-y-3">
+            <div class="flex border-b border-slate-200">
+              <button id="tab-btn-cust" type="button" onclick="switchLoginTab('customer')" class="flex-1 py-2 font-bold text-center border-b-2 ${defaultRole==='customer'?'border-teal-600 text-teal-700':'border-transparent text-slate-400'}">Customer</button>
+              <button id="tab-btn-adm" type="button" onclick="switchLoginTab('admin')" class="flex-1 py-2 font-bold text-center border-b-2 ${defaultRole==='admin'?'border-amber-600 text-amber-700':'border-transparent text-slate-400'}">Administrator</button>
+            </div>
+
+            <!-- Panel Customer -->
+            <div id="panel-login-cust" class="${defaultRole==='customer'?'block':'hidden'} space-y-2.5">
+              <button type="button" onclick="doGoogleLogin()" class="w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-xs">
+                <span>🌐 Masuk Cepat Akun Google</span>
+              </button>
+              <div class="text-center text-[10px] text-slate-400 font-semibold">- ATAU DAFTAR / MASUK MANUAL -</div>
+              <div>
+                <label class="font-bold">Nama Lengkap / No. WA</label>
+                <input type="text" id="cust_identifier" placeholder="Nama Anda atau 08..." class="w-full p-2 border rounded-xl mt-1">
+              </div>
+              <div>
+                <label class="font-bold">No. WhatsApp Aktif</label>
+                <input type="text" id="cust_nowa" placeholder="08..." class="w-full p-2 border rounded-xl mt-1">
+              </div>
+              <button type="button" onclick="doCustManualLogin()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl shadow-xs">
+                Masuk / Buat Akun Customer
+              </button>
+            </div>
+
+            <!-- Panel Admin -->
+            <div id="panel-login-adm" class="${defaultRole==='admin'?'block':'hidden'} space-y-2.5">
+              <p class="text-[11px] text-slate-500">Khusus pengelola & kasir percetakan</p>
+              <div>
+                <label class="font-bold">PIN / Password Admin</label>
+                <input type="password" id="adm_password" placeholder="Default: admin123" class="w-full p-2 border rounded-xl mt-1 font-mono">
+              </div>
+              <button type="button" onclick="doAdminLogin()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-xl shadow-xs">
+                Masuk Sebagai Administrator
+              </button>
+            </div>
+          </div>
+        `,
+        showConfirmButton: false,
+        showCloseButton: true
+      });
+    }
+
+    window.switchLoginTab = function(role) {
+      const btnC = document.getElementById('tab-btn-cust');
+      const btnA = document.getElementById('tab-btn-adm');
+      const panC = document.getElementById('panel-login-cust');
+      const panA = document.getElementById('panel-login-adm');
+
+      if (role === 'customer') {
+        btnC.className = 'flex-1 py-2 font-bold text-center border-b-2 border-teal-600 text-teal-700';
+        btnA.className = 'flex-1 py-2 font-bold text-center border-b-2 border-transparent text-slate-400';
+        panC.classList.remove('hidden');
+        panA.classList.add('hidden');
+      } else {
+        btnC.className = 'flex-1 py-2 font-bold text-center border-b-2 border-transparent text-slate-400';
+        btnA.className = 'flex-1 py-2 font-bold text-center border-b-2 border-amber-600 text-amber-700';
+        panC.classList.add('hidden');
+        panA.classList.remove('hidden');
+      }
+    };
+
+    window.doGoogleLogin = function() {
+      // Demo instant Google sign-in
+      let user = appState.data.users.find(u => u.Role === 'customer');
+      if (!user) {
+        user = {
+          ID: 'C' + Date.now(),
+          Role: 'customer',
+          KodeKhusus: Math.floor(10000000 + Math.random() * 90000000).toString(),
+          Nama: 'Pelanggan Google',
+          NoWA: '08123456789',
+          Alamat: 'Yogyakarta',
+          Password: 'cust',
+          Email: 'user@gmail.com'
+        };
+        appState.data.users.push(user);
+        saveLocal(appState.data);
+      }
+      appState.currentUser = user;
+      appState.currentRole = 'customer';
+      localStorage.setItem(AUTH_KEY, user.ID);
+      Swal.close();
+      showToast(`Selamat datang, ${user.Nama}!`);
+      renderApp();
+    };
+
+    window.doCustManualLogin = function() {
+      const name = document.getElementById('cust_identifier')?.value.trim();
+      const wa = document.getElementById('cust_nowa')?.value.trim();
+      if (!name) {
+        showToast('Nama wajib diisi!', 'warning');
+        return;
+      }
+      let user = appState.data.users.find(u => u.Nama.toLowerCase() === name.toLowerCase() || (wa && u.NoWA === wa));
+      if (!user) {
+        user = {
+          ID: 'C' + Date.now(),
+          Role: 'customer',
+          KodeKhusus: Math.floor(10000000 + Math.random() * 90000000).toString(),
+          Nama: name,
+          NoWA: wa || '08123456789',
+          Alamat: 'Yogyakarta',
+          Password: 'cust',
+          Email: name.toLowerCase().replace(/[^a-z0-9]/g, '') + '@gmail.com'
+        };
+        appState.data.users.push(user);
+        saveLocal(appState.data);
+        if (isGas) google.script.run.registerCustomer(user);
+      }
+      appState.currentUser = user;
+      appState.currentRole = 'customer';
+      localStorage.setItem(AUTH_KEY, user.ID);
+      Swal.close();
+      showToast(`Masuk sebagai ${user.Nama}`);
+      renderApp();
+    };
+
+    window.doAdminLogin = function() {
+      const pass = document.getElementById('adm_password')?.value;
+      const admin = appState.data.users.find(u => u.Role === 'admin');
+      if (admin && (pass === admin.Password || pass === 'admin123')) {
+        appState.currentUser = admin;
+        appState.currentRole = 'admin';
+        appState.adminTab = 'dashboard';
+        localStorage.setItem(AUTH_KEY, admin.ID);
+        Swal.close();
+        showToast('Selamat datang di Panel Admin!');
+        renderApp();
+      } else {
+        showToast('Password Admin salah! (Default: admin123)', 'error');
+      }
+    };
+
+    function handleLogout() {
+      localStorage.setItem(AUTH_KEY, 'LOGGED_OUT');
+      appState.currentUser = null;
+      appState.currentRole = 'customer';
+      appState.activeTab = 'home';
+      showToast('Anda telah keluar dari akun.');
+      renderApp();
+    }
+
+    // Initialize
+    window.onload = initApp;
+  </script>
+</body>
+</html>

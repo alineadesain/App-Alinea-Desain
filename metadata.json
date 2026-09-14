@@ -1,0 +1,6 @@
+{
+  "name": "Alinea Desain",
+  "description": "Aplikasi pendataan keuangan, produk, dan customer percetakan Alinea Desain dengan slider otomatis, running text, dan manajemen pesanan",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

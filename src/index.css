@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@keyframes marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+@keyframes marquee-infinite {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee-scroll {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 16s linear infinite;
+}
+
+.animate-marquee-scroll:hover {
+  animation-play-state: paused;
+}
+
+.animate-marquee-loop {
+  display: flex;
+  width: max-content;
+  animation: marquee-infinite 22s linear infinite;
+}
+
+.animate-marquee-loop:hover {
+  animation-play-state: paused;
+}
