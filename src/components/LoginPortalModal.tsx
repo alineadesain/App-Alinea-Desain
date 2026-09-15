@@ -9,13 +9,10 @@ import {
   MapPin,
   Eye,
   EyeOff,
-  Sparkles,
   LogIn,
   UserPlus,
-  ArrowRight,
   CheckCircle2,
   AlertCircle,
-  Building2,
   ShieldCheck,
   ShoppingBag
 } from 'lucide-react';
@@ -31,6 +28,15 @@ interface LoginPortalModalProps {
   initialRole?: 'customer' | 'admin';
 }
 
+// Helper normalisasi nomor telepon agar 08123..., 628123..., +62 812-3... saling cocok
+function cleanPhone(raw: string): string {
+  let digits = (raw || '').replace(/\D/g, '');
+  if (digits.startsWith('62')) {
+    digits = '0' + digits.slice(2);
+  }
+  return digits;
+}
+
 export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
   isOpen,
   onClose,
@@ -43,12 +49,17 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
   // Selected portal: 'customer' or 'admin'
   const [selectedRole, setSelectedRole] = useState<'customer' | 'admin'>(initialRole);
   
-  // Customer mode: 'login' or 'register'
+  // Customer subtab: 'login' or 'register'
   const [custMode, setCustMode] = useState<'login' | 'register'>('login');
+
+  // Admin subtab: 'login' or 'register'
+  const [adminMode, setAdminMode] = useState<'login' | 'register'>('login');
   
   // Password visibility toggles
   const [showCustPassword, setShowCustPassword] = useState(false);
+  const [showCustRegPassword, setShowCustRegPassword] = useState(false);
   const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [showAdminRegPassword, setShowAdminRegPassword] = useState(false);
 
   // Customer Login Form State
   const [custLoginIdentifier, setCustLoginIdentifier] = useState('');
@@ -66,42 +77,54 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
   const [adminIdentifier, setAdminIdentifier] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
 
+  // Admin Register Form State
+  const [adminRegNama, setAdminRegNama] = useState('');
+  const [adminRegNoWA, setAdminRegNoWA] = useState('');
+  const [adminRegEmail, setAdminRegEmail] = useState('');
+  const [adminRegPassword, setAdminRegPassword] = useState('');
+  const [adminRegConfirmPassword, setAdminRegConfirmPassword] = useState('');
+
   // Error & Feedback Message
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
   if (!isOpen) return null;
 
-  const handleQuickAdminLogin = (adminUser: UserType) => {
-    onLoginSuccess(adminUser);
-    if (onClose) onClose();
-  };
-
   // Handle Customer Manual Login
-  const handleCustomerLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCustomerLoginSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
 
     const term = custLoginIdentifier.trim().toLowerCase();
+    const phoneTerm = cleanPhone(term);
+
     if (!term) {
-      setErrorMsg('Masukkan No. WhatsApp, Kode Customer, atau Email!');
+      setErrorMsg('Harap masukkan No. WhatsApp, Kode Customer, Nama, atau Email!');
+      return;
+    }
+
+    if (!custLoginPassword) {
+      setErrorMsg('Harap masukkan password customer Anda!');
       return;
     }
 
     const matched = existingUsers.find((u) => {
-      const matchWa = u.NoWA.replace(/\D/g, '') === term.replace(/\D/g, '');
-      const matchCode = u.KodeKhusus.toLowerCase() === term;
-      const matchEmail = u.Email?.toLowerCase() === term;
-      const matchName = u.Nama.toLowerCase() === term;
+      const uPhone = cleanPhone(u.NoWA);
+      const matchWa = phoneTerm && uPhone && (uPhone === phoneTerm || uPhone.endsWith(phoneTerm) || phoneTerm.endsWith(uPhone));
+      const matchCode = u.KodeKhusus && u.KodeKhusus.toLowerCase() === term;
+      const matchEmail = u.Email && u.Email.toLowerCase() === term;
+      const matchName = u.Nama && u.Nama.toLowerCase() === term;
       return matchWa || matchCode || matchEmail || matchName;
     });
 
     if (!matched) {
-      setErrorMsg('Akun customer tidak ditemukan. Silakan periksa data atau daftar baru.');
+      setErrorMsg('Akun customer tidak ditemukan. Silakan periksa kembali data atau daftar akun baru.');
       return;
     }
 
     if (matched.Role !== 'customer') {
-      setErrorMsg('Akun ini adalah akun Administrator. Silakan pilih tab "Login Admin" di atas.');
+      setErrorMsg('Akun ini adalah akun Administrator. Silakan klik tab "Login Admin" di atas.');
       return;
     }
 
@@ -115,16 +138,17 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
   };
 
   // Handle Customer Manual Register
-  const handleCustomerRegisterSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCustomerRegisterSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
 
     if (!regNama.trim()) {
-      setErrorMsg('Nama lengkap harus diisi!');
+      setErrorMsg('Nama lengkap customer harus diisi!');
       return;
     }
     if (!regNoWA.trim()) {
-      setErrorMsg('No. WhatsApp harus diisi!');
+      setErrorMsg('Nomor WhatsApp harus diisi!');
       return;
     }
     if (regPassword.length < 4) {
@@ -136,11 +160,21 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
       return;
     }
 
-    const phoneExists = existingUsers.some(
-      (u) => u.NoWA.replace(/\D/g, '') === regNoWA.trim().replace(/\D/g, '')
+    const phoneClean = cleanPhone(regNoWA.trim());
+    const existingUser = existingUsers.find(
+      (u) => cleanPhone(u.NoWA) === phoneClean
     );
-    if (phoneExists) {
-      setErrorMsg('Nomor WhatsApp ini sudah terdaftar. Silakan langsung masuk di tab Masuk Akun.');
+
+    if (existingUser) {
+      // Jika nomor sudah ada dan password cocok, langsung login
+      if (existingUser.Password === regPassword && existingUser.Role === 'customer') {
+        onLoginSuccess(existingUser);
+        if (onClose) onClose();
+        return;
+      }
+      setErrorMsg('Nomor WhatsApp ini sudah terdaftar! Mengalihkan ke tab Masuk Akun...');
+      setCustLoginIdentifier(regNoWA.trim());
+      setCustMode('login');
       return;
     }
 
@@ -163,28 +197,38 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
   };
 
   // Handle Admin Login Submit
-  const handleAdminLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAdminLoginSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
 
     const term = adminIdentifier.trim().toLowerCase();
+    const phoneTerm = cleanPhone(term);
+
     if (!term) {
-      setErrorMsg('Masukkan No. WA, Email, atau Username Admin!');
+      setErrorMsg('Masukkan No. WhatsApp, Email, atau Username Admin!');
       return;
     }
 
+    if (!adminPassword) {
+      setErrorMsg('Masukkan password administrator!');
+      return;
+    }
+
+    // 1. Cari di existingUsers
     let matched = existingUsers.find((u) => {
-      const matchWa = u.NoWA.replace(/\D/g, '') === term.replace(/\D/g, '');
-      const matchEmail = u.Email?.toLowerCase() === term;
-      const matchName = u.Nama.toLowerCase() === term;
-      const matchAdminKeyword = (term === 'admin' || term === 'admin alinea') && u.Role === 'admin';
-      return matchWa || matchEmail || matchName || matchAdminKeyword;
+      const uPhone = cleanPhone(u.NoWA);
+      const matchWa = phoneTerm && uPhone && (uPhone === phoneTerm || uPhone.endsWith(phoneTerm) || phoneTerm.endsWith(uPhone));
+      const matchEmail = u.Email && u.Email.toLowerCase() === term;
+      const matchName = u.Nama && u.Nama.toLowerCase() === term;
+      const matchAdminWord = (term === 'admin' || term === 'admin alinea') && u.Role === 'admin';
+      return (matchWa || matchEmail || matchName || matchAdminWord) && u.Role === 'admin';
     });
 
-    // Fallback pencocokan default Admin Alinea
-    if (!matched && (term === 'admin alinea' || term === 'admin' || term === '081234567890' || term === 'alineadesain@gmail.com')) {
+    // 2. Fallback pencocokan default admin Alinea
+    if (!matched && (term === 'admin' || term === 'admin alinea' || term === 'alineadesain@gmail.com' || phoneTerm === '081234567890')) {
       if (adminPassword === 'admin123') {
-        const fallbackAdmin: UserType = {
+        const defaultAdmin: UserType = {
           ID: 'U1',
           Role: 'admin',
           KodeKhusus: '-',
@@ -195,14 +239,14 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
           TglDaftar: '2025-01-01T08:00:00.000Z',
           Email: 'alineadesain@gmail.com'
         };
-        onLoginSuccess(fallbackAdmin);
+        onLoginSuccess(defaultAdmin);
         if (onClose) onClose();
         return;
       }
     }
 
     if (!matched) {
-      setErrorMsg('Akun Administrator tidak ditemukan. Pastikan Username atau Nomor WA sudah benar.');
+      setErrorMsg('Akun Administrator tidak ditemukan. Pastikan Username, Email, atau Nomor WhatsApp sudah benar.');
       return;
     }
 
@@ -212,7 +256,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
     }
 
     if (matched.Password !== adminPassword && !(adminPassword === 'admin123' && matched.Nama.toLowerCase() === 'admin alinea')) {
-      setErrorMsg('Password admin salah. Silakan periksa kembali password Anda.');
+      setErrorMsg('Password administrator salah. Silakan periksa kembali password Anda.');
       return;
     }
 
@@ -220,8 +264,64 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
     if (onClose) onClose();
   };
 
+  // Handle Admin Register Submit
+  const handleAdminRegisterSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!adminRegNama.trim()) {
+      setErrorMsg('Nama lengkap administrator harus diisi!');
+      return;
+    }
+    if (!adminRegNoWA.trim()) {
+      setErrorMsg('Nomor WhatsApp admin harus diisi!');
+      return;
+    }
+    if (adminRegPassword.length < 4) {
+      setErrorMsg('Password minimal 4 karakter!');
+      return;
+    }
+    if (adminRegPassword !== adminRegConfirmPassword) {
+      setErrorMsg('Konfirmasi password tidak cocok!');
+      return;
+    }
+
+    const phoneClean = cleanPhone(adminRegNoWA.trim());
+    const existingAdmin = existingUsers.find(
+      (u) => cleanPhone(u.NoWA) === phoneClean && u.Role === 'admin'
+    );
+
+    if (existingAdmin) {
+      if (existingAdmin.Password === adminRegPassword) {
+        onLoginSuccess(existingAdmin);
+        if (onClose) onClose();
+        return;
+      }
+      setErrorMsg('Nomor WhatsApp ini sudah terdaftar sebagai Admin! Mengalihkan ke tab Masuk Admin...');
+      setAdminIdentifier(adminRegNoWA.trim());
+      setAdminMode('login');
+      return;
+    }
+
+    const newAdminUser: UserType = {
+      ID: `U-${Date.now().toString().slice(-4)}`,
+      Role: 'admin',
+      KodeKhusus: '-',
+      Nama: adminRegNama.trim(),
+      NoWA: adminRegNoWA.trim(),
+      Email: adminRegEmail.trim() || undefined,
+      Alamat: 'Yogyakarta',
+      Password: adminRegPassword,
+      TglDaftar: new Date().toISOString()
+    };
+
+    onLoginSuccess(newAdminUser);
+    if (onClose) onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4 overflow-y-auto">
       <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-100 my-auto animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
         {/* Brand Top Header */}
         <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white p-5 relative border-b border-teal-800/30">
@@ -256,7 +356,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition"
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
                 title="Tutup & Lihat Katalog"
               >
                 <X className="w-4 h-4" />
@@ -266,12 +366,12 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
 
           <div className="mt-4 pt-3 border-t border-white/10">
             <h3 className="text-base font-black text-white">
-              {selectedRole === 'customer' ? 'Portal Masuk Customer' : 'Portal Masuk Administrator'}
+              {selectedRole === 'customer' ? 'Portal Akun Customer' : 'Portal Akun Administrator'}
             </h3>
             <p className="text-[11px] text-slate-300 mt-0.5">
               {selectedRole === 'customer'
-                ? 'Pesan cetak kilat, cek nota, dan pantau status pengerjaan'
-                : 'Akses dashboard transaksi kasir, slider, dan pembukuan toko'}
+                ? 'Masuk atau daftar untuk memesan cetak kilat dan cek nota'
+                : 'Masuk atau daftar akun pengelola percetakan, kasir, dan toko'}
             </p>
           </div>
         </div>
@@ -284,15 +384,16 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
               onClick={() => {
                 setSelectedRole('customer');
                 setErrorMsg('');
+                setSuccessMsg('');
               }}
-              className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+              className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
                 selectedRole === 'customer'
                   ? 'bg-white text-teal-900 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <User className={`w-4 h-4 ${selectedRole === 'customer' ? 'text-teal-600' : 'text-slate-400'}`} />
-              <span>Login Customer</span>
+              <span>Portal Customer</span>
             </button>
 
             <button
@@ -300,24 +401,31 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
               onClick={() => {
                 setSelectedRole('admin');
                 setErrorMsg('');
+                setSuccessMsg('');
               }}
-              className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition ${
+              className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer ${
                 selectedRole === 'admin'
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Shield className={`w-4 h-4 ${selectedRole === 'admin' ? 'text-rose-600' : 'text-slate-400'}`} />
-              <span>Login Admin</span>
+              <span>Portal Admin</span>
             </button>
           </div>
         </div>
 
-        {/* ERROR NOTIFICATION */}
+        {/* ERROR & FEEDBACK NOTIFICATION */}
         {errorMsg && (
           <div className="mx-4 mt-3 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
             <span>{errorMsg}</span>
+          </div>
+        )}
+        {successMsg && (
+          <div className="mx-4 mt-3 p-3 bg-teal-50 border border-teal-200 text-teal-700 rounded-xl text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-teal-600" />
+            <span>{successMsg}</span>
           </div>
         )}
 
@@ -335,8 +443,9 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                   onClick={() => {
                     setCustMode('login');
                     setErrorMsg('');
+                    setSuccessMsg('');
                   }}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
                     custMode === 'login'
                       ? 'bg-white text-teal-800 shadow-2xs'
                       : 'text-slate-500 hover:text-slate-800'
@@ -349,8 +458,9 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                   onClick={() => {
                     setCustMode('register');
                     setErrorMsg('');
+                    setSuccessMsg('');
                   }}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
                     custMode === 'register'
                       ? 'bg-white text-teal-800 shadow-2xs'
                       : 'text-slate-500 hover:text-slate-800'
@@ -362,19 +472,18 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
 
               {/* CUSTOMER LOGIN FORM */}
               {custMode === 'login' ? (
-                <form onSubmit={handleCustomerLoginSubmit} className="space-y-3">
+                <form onSubmit={handleCustomerLoginSubmit} noValidate className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       No. WhatsApp / Kode Customer / Email
                     </label>
                     <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                       <input
                         type="text"
-                        required
                         value={custLoginIdentifier}
                         onChange={(e) => setCustLoginIdentifier(e.target.value)}
-                        placeholder="Masukkan No. WhatsApp / Email / Kode Customer"
+                        placeholder="Contoh: 081234567890 atau Budi Santoso"
                         className="w-full text-xs pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-teal-600"
                       />
                     </div>
@@ -383,10 +492,9 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
                     <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                       <input
                         type={showCustPassword ? 'text' : 'password'}
-                        required
                         value={custLoginPassword}
                         onChange={(e) => setCustLoginPassword(e.target.value)}
                         placeholder="Masukkan password Anda"
@@ -395,7 +503,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setShowCustPassword(!showCustPassword)}
-                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
                       >
                         {showCustPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -404,7 +512,8 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl text-xs transition shadow-md shadow-teal-700/20 flex items-center justify-center gap-2"
+                    onClick={() => handleCustomerLoginSubmit()}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl text-xs transition shadow-md shadow-teal-700/20 flex items-center justify-center gap-2 active:scale-98 cursor-pointer"
                   >
                     <LogIn className="w-4 h-4" />
                     <span>Masuk Sebagai Customer</span>
@@ -412,16 +521,15 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                 </form>
               ) : (
                 /* CUSTOMER REGISTER FORM */
-                <form onSubmit={handleCustomerRegisterSubmit} className="space-y-3">
+                <form onSubmit={handleCustomerRegisterSubmit} noValidate className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       Nama Lengkap <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                       <input
                         type="text"
-                        required
                         value={regNama}
                         onChange={(e) => setRegNama(e.target.value)}
                         placeholder="Contoh: Rian Prasetya"
@@ -435,10 +543,9 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                       Nomor WhatsApp <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                       <input
                         type="tel"
-                        required
                         value={regNoWA}
                         onChange={(e) => setRegNoWA(e.target.value)}
                         placeholder="Contoh: 081234567890"
@@ -452,7 +559,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                       Email (Opsional)
                     </label>
                     <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                       <input
                         type="email"
                         value={regEmail}
@@ -468,7 +575,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                       Alamat Pengiriman / Domisili
                     </label>
                     <div className="relative">
-                      <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                       <input
                         type="text"
                         value={regAlamat}
@@ -486,7 +593,6 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                       </label>
                       <input
                         type="password"
-                        required
                         value={regPassword}
                         onChange={(e) => setRegPassword(e.target.value)}
                         placeholder="Min. 4 karakter"
@@ -499,7 +605,6 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                       </label>
                       <input
                         type="password"
-                        required
                         value={regConfirmPassword}
                         onChange={(e) => setRegConfirmPassword(e.target.value)}
                         placeholder="Ulangi password"
@@ -510,7 +615,8 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl text-xs transition shadow-md shadow-teal-700/20 flex items-center justify-center gap-2"
+                    onClick={() => handleCustomerRegisterSubmit()}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-xl text-xs transition shadow-md shadow-teal-700/20 flex items-center justify-center gap-2 active:scale-98 cursor-pointer"
                   >
                     <UserPlus className="w-4 h-4" />
                     <span>Daftarkan Akun Customer Baru</span>
@@ -521,76 +627,191 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
           )}
 
           {/* =================================================== */}
-          {/* 2. ADMINISTRATOR & KASIR LOGIN PANEL */}
+          {/* 2. ADMINISTRATOR & KASIR LOGIN / REGISTER PANEL */}
           {/* =================================================== */}
           {selectedRole === 'admin' && (
             <div className="space-y-4">
-              <div className="bg-amber-50/70 border border-amber-200 p-3 rounded-2xl flex items-start gap-2.5">
-                <ShieldCheck className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                <div className="text-xs text-amber-900">
-                  <p className="font-bold">Akses Khusus Tim Percetakan & Kasir</p>
-                  <p className="text-[11px] text-amber-800 leading-relaxed mt-0.5">
-                    Hanya akun dengan hak akses <strong>Administrator</strong> yang dapat masuk ke panel ini untuk memproses pesanan, pengeluaran, serta data toko.
+              <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex items-start gap-2.5">
+                <ShieldCheck className="w-5 h-5 text-teal-700 shrink-0 mt-0.5" />
+                <div className="text-xs text-slate-700">
+                  <p className="font-bold text-slate-800">Panel Khusus Pengelola & Kasir Percetakan</p>
+                  <p className="text-[11px] text-slate-600 leading-relaxed mt-0.5">
+                    Gunakan akun Administrator untuk memproses transaksi kasir, katalog produk, pembukuan kas, serta pengaturan toko.
                   </p>
                 </div>
               </div>
 
-              <form onSubmit={handleAdminLoginSubmit} className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    No. WhatsApp / Email / Username Admin
-                  </label>
-                  <div className="relative">
-                    <Shield className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      required
-                      value={adminIdentifier}
-                      onChange={(e) => setAdminIdentifier(e.target.value)}
-                      placeholder="Contoh: 081234567890 atau Admin Alinea"
-                      className="w-full text-xs pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-slate-800"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Password Admin</label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type={showAdminPassword ? 'text' : 'password'}
-                      required
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Masukkan password admin"
-                      className="w-full text-xs pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-slate-800"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowAdminPassword(!showAdminPassword)}
-                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
-                    >
-                      {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Default Credentials Notice */}
-                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-[11px] text-slate-600">
-                  <span className="text-slate-500">Kredensial Default Admin:</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    Username: <span className="text-teal-700 font-bold">Admin Alinea</span> • Password: <span className="text-teal-700 font-bold">admin123</span>
-                  </span>
-                </div>
-
+              {/* Subtabs: Masuk Admin vs Daftar Admin Baru */}
+              <div className="flex bg-slate-100 p-1 rounded-xl">
                 <button
-                  type="submit"
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl text-xs transition shadow-md shadow-slate-900/20 flex items-center justify-center gap-2"
+                  type="button"
+                  onClick={() => {
+                    setAdminMode('login');
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                  }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
+                    adminMode === 'login'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
                 >
-                  <LogIn className="w-4 h-4 text-teal-400" />
-                  <span>Masuk ke Panel Administrator</span>
+                  Masuk Akun Admin
                 </button>
-              </form>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminMode('register');
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                  }}
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition cursor-pointer ${
+                    adminMode === 'register'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Daftar Akun Admin Baru
+                </button>
+              </div>
+
+              {/* ADMIN LOGIN FORM */}
+              {adminMode === 'login' ? (
+                <form onSubmit={handleAdminLoginSubmit} noValidate className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      No. WhatsApp / Email / Username Admin
+                    </label>
+                    <div className="relative">
+                      <Shield className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        value={adminIdentifier}
+                        onChange={(e) => setAdminIdentifier(e.target.value)}
+                        placeholder="Contoh: 081234567890 atau Admin Alinea"
+                        className="w-full text-xs pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Password Admin</label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type={showAdminPassword ? 'text' : 'password'}
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="Masukkan password admin"
+                        className="w-full text-xs pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-slate-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPassword(!showAdminPassword)}
+                        className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    onClick={() => handleAdminLoginSubmit()}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl text-xs transition shadow-md shadow-slate-900/20 flex items-center justify-center gap-2 active:scale-98 cursor-pointer"
+                  >
+                    <LogIn className="w-4 h-4 text-teal-400" />
+                    <span>Masuk ke Panel Administrator</span>
+                  </button>
+                </form>
+              ) : (
+                /* ADMIN REGISTER FORM */
+                <form onSubmit={handleAdminRegisterSubmit} noValidate className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nama Lengkap Administrator <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Shield className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="text"
+                        value={adminRegNama}
+                        onChange={(e) => setAdminRegNama(e.target.value)}
+                        placeholder="Contoh: Admin Kasir 2"
+                        className="w-full text-xs pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Nomor WhatsApp <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="tel"
+                        value={adminRegNoWA}
+                        onChange={(e) => setAdminRegNoWA(e.target.value)}
+                        placeholder="Contoh: 081298765432"
+                        className="w-full text-xs pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Email (Opsional)
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <input
+                        type="email"
+                        value={adminRegEmail}
+                        onChange={(e) => setAdminRegEmail(e.target.value)}
+                        placeholder="Contoh: kasir@alineadesain.com"
+                        className="w-full text-xs pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Password <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={adminRegPassword}
+                        onChange={(e) => setAdminRegPassword(e.target.value)}
+                        placeholder="Min. 4 karakter"
+                        className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Ulangi Password <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={adminRegConfirmPassword}
+                        onChange={(e) => setAdminRegConfirmPassword(e.target.value)}
+                        placeholder="Ulangi password"
+                        className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    onClick={() => handleAdminRegisterSubmit()}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl text-xs transition shadow-md shadow-slate-900/20 flex items-center justify-center gap-2 active:scale-98 cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4 text-teal-400" />
+                    <span>Daftarkan Akun Administrator Baru</span>
+                  </button>
+                </form>
+              )}
             </div>
           )}
 
@@ -601,7 +822,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
               <span>Satu Akun per Sesi (Login Tersimpan Otomatis)</span>
             </div>
             <p className="text-[11px] leading-relaxed text-slate-500">
-              Setelah login, info akun Anda disimpan di perangkat ini sehingga Anda tidak perlu login berulang kali. Untuk beralih ke akun lain, Anda harus menekan tombol <strong>Keluar Akun</strong> terlebih dahulu.
+              Setelah login, info akun Anda disimpan di perangkat ini sehingga Anda tidak perlu login berulang kali. Untuk beralih ke akun lain, gunakan tombol <strong>Keluar Akun</strong>.
             </p>
           </div>
         </div>
@@ -612,7 +833,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1 mx-auto py-1"
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1 mx-auto py-1 cursor-pointer"
             >
               <ShoppingBag className="w-3.5 h-3.5 text-slate-400" />
               <span>Lihat Produk Percetakan Sebagai Tamu</span>
@@ -623,3 +844,4 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
     </div>
   );
 };
+

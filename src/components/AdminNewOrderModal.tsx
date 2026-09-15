@@ -68,10 +68,10 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
       id: 'admin_item_' + Date.now(),
       productId: products[0]?.ID || 'P1',
       qty: 1,
-      panjang: 200,
-      lebar: 100,
+      panjang: 0,
+      lebar: 0,
       finishing: 'Simkel',
-      withDesain: true,
+      withDesain: false,
       withCutting: false,
       withLaminating: false
     }
@@ -106,17 +106,21 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
 
     let base = 0;
     if (prod.Kategori === 'meteran') {
-      const p = Math.max(50, item.panjang || 100);
-      const l = Math.max(50, item.lebar || 100);
-      const luasM2 = Math.max(1, (p / 100) * (l / 100));
-      base = prod.Harga * luasM2 * (item.qty || 1);
+      const p = item.panjang || 0;
+      const l = item.lebar || 0;
+      if (p <= 0 || l <= 0) {
+        base = 0;
+      } else {
+        const luasM2 = Math.max(1, (p / 100) * (l / 100));
+        base = prod.Harga * luasM2 * (item.qty || 1);
+      }
     } else {
       base = prod.Harga * (item.qty || 1);
     }
 
-    const dsn = item.withDesain ? prod.HargaDesain || 15000 : 0;
-    const cut = item.withCutting ? (prod.HargaCutting || 5000) * (item.qty || 1) : 0;
-    const lam = item.withLaminating ? (prod.HargaLaminating || 5000) * (item.qty || 1) : 0;
+    const dsn = item.withDesain ? (prod.HargaDesain !== undefined ? Number(prod.HargaDesain) : 15000) : 0;
+    const cut = item.withCutting ? (prod.HargaCutting !== undefined ? Number(prod.HargaCutting) : 0) * (item.qty || 1) : 0;
+    const lam = item.withLaminating ? (prod.HargaLaminating !== undefined ? Number(prod.HargaLaminating) : 0) * (item.qty || 1) : 0;
 
     return Math.round(base + dsn + cut + lam);
   };
@@ -129,11 +133,11 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
     setItems([
       ...items,
       {
-        id: 'admin_item_' + Date.now() + '_' + Math.random(),
+        id: 'admin_item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
         productId: products[0]?.ID || 'P1',
         qty: 1,
-        panjang: 200,
-        lebar: 100,
+        panjang: 0,
+        lebar: 0,
         finishing: 'Simkel',
         withDesain: false,
         withCutting: false,
@@ -222,9 +226,9 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
         withDesain: it.withDesain,
         withCutting: it.withCutting,
         withLaminating: it.withLaminating,
-        jasaDesain: it.withDesain ? prod.HargaDesain || 15000 : 0,
-        jasaCutting: it.withCutting ? (prod.HargaCutting || 5000) * it.qty : 0,
-        jasaLaminating: it.withLaminating ? (prod.HargaLaminating || 5000) * it.qty : 0,
+        jasaDesain: it.withDesain ? (prod.HargaDesain !== undefined ? Number(prod.HargaDesain) : 15000) : 0,
+        jasaCutting: it.withCutting ? (prod.HargaCutting !== undefined ? Number(prod.HargaCutting) : 0) * it.qty : 0,
+        jasaLaminating: it.withLaminating ? (prod.HargaLaminating !== undefined ? Number(prod.HargaLaminating) : 0) * it.qty : 0,
         subtotal: calculateItemSubtotal(it)
       };
     });
@@ -537,17 +541,18 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                         </label>
                         <input
                           type="number"
-                          min="10"
+                          min="0"
                           value={item.panjang}
                           onChange={(e) => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value === '' ? 0 : Number(e.target.value);
                             setItems(
                               items.map((it) =>
                                 it.id === item.id ? { ...it, panjang: val } : it
                               )
                             );
                           }}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"
+                          placeholder="0"
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center"
                         />
                       </div>
                       <div>
@@ -556,17 +561,18 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                         </label>
                         <input
                           type="number"
-                          min="10"
+                          min="0"
                           value={item.lebar}
                           onChange={(e) => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value === '' ? 0 : Number(e.target.value);
                             setItems(
                               items.map((it) =>
                                 it.id === item.id ? { ...it, lebar: val } : it
                               )
                             );
                           }}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"
+                          placeholder="0"
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center"
                         />
                       </div>
                       <div>
@@ -633,9 +639,12 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                     </div>
 
                     {/* Services toggles */}
-                    <div className="bg-white p-2 rounded-xl border border-slate-200/70 space-y-1">
+                    <div className="bg-white p-2 rounded-xl border border-slate-200/70 space-y-1.5">
                       <label className="flex items-center justify-between text-[11px] cursor-pointer">
-                        <span className="text-slate-600">Desain Setting</span>
+                        <div>
+                          <span className="text-slate-700 font-medium block">Desain Setting</span>
+                          <span className="text-[9px] text-slate-400">+{formatRp(currentProd?.HargaDesain || 15000)}</span>
+                        </div>
                         <input
                           type="checkbox"
                           checked={item.withDesain}
@@ -652,7 +661,10 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                       </label>
 
                       <label className="flex items-center justify-between text-[11px] cursor-pointer">
-                        <span className="text-slate-600">Cutting Presisi</span>
+                        <div>
+                          <span className="text-slate-700 font-medium block">Cutting Presisi</span>
+                          <span className="text-[9px] text-slate-400">+{formatRp((currentProd?.HargaCutting || 0) * (item.qty || 1))}</span>
+                        </div>
                         <input
                           type="checkbox"
                           checked={item.withCutting}
@@ -669,7 +681,10 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                       </label>
 
                       <label className="flex items-center justify-between text-[11px] cursor-pointer">
-                        <span className="text-slate-600">Laminating</span>
+                        <div>
+                          <span className="text-slate-700 font-medium block">Laminating</span>
+                          <span className="text-[9px] text-slate-400">+{formatRp((currentProd?.HargaLaminating || 0) * (item.qty || 1))}</span>
+                        </div>
                         <input
                           type="checkbox"
                           checked={item.withLaminating}
