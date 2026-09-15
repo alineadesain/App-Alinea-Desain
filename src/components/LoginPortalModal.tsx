@@ -173,15 +173,36 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
       return;
     }
 
-    const matched = existingUsers.find((u) => {
+    let matched = existingUsers.find((u) => {
       const matchWa = u.NoWA.replace(/\D/g, '') === term.replace(/\D/g, '');
       const matchEmail = u.Email?.toLowerCase() === term;
       const matchName = u.Nama.toLowerCase() === term;
-      return matchWa || matchEmail || matchName;
+      const matchAdminKeyword = (term === 'admin' || term === 'admin alinea') && u.Role === 'admin';
+      return matchWa || matchEmail || matchName || matchAdminKeyword;
     });
 
+    // Fallback pencocokan default Admin Alinea
+    if (!matched && (term === 'admin alinea' || term === 'admin' || term === '081234567890' || term === 'alineadesain@gmail.com')) {
+      if (adminPassword === 'admin123') {
+        const fallbackAdmin: UserType = {
+          ID: 'U1',
+          Role: 'admin',
+          KodeKhusus: '-',
+          Nama: 'Admin Alinea',
+          NoWA: '081234567890',
+          Alamat: 'Jl. Prof. Dr. Sardjito No. 45, Yogyakarta',
+          Password: 'admin123',
+          TglDaftar: '2025-01-01T08:00:00.000Z',
+          Email: 'alineadesain@gmail.com'
+        };
+        onLoginSuccess(fallbackAdmin);
+        if (onClose) onClose();
+        return;
+      }
+    }
+
     if (!matched) {
-      setErrorMsg('Akun Administrator tidak ditemukan. Periksa kembali kredensial Anda.');
+      setErrorMsg('Akun Administrator tidak ditemukan. Pastikan Username atau Nomor WA sudah benar.');
       return;
     }
 
@@ -190,17 +211,14 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
       return;
     }
 
-    if (matched.Password !== adminPassword) {
-      setErrorMsg('Password admin salah. Silakan coba lagi.');
+    if (matched.Password !== adminPassword && !(adminPassword === 'admin123' && matched.Nama.toLowerCase() === 'admin alinea')) {
+      setErrorMsg('Password admin salah. Silakan periksa kembali password Anda.');
       return;
     }
 
     onLoginSuccess(matched);
     if (onClose) onClose();
   };
-
-  // Sample admin accounts for quick testing
-  const demoAdmins = existingUsers.filter((u) => u.Role === 'admin');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 overflow-y-auto">
@@ -356,17 +374,14 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                         required
                         value={custLoginIdentifier}
                         onChange={(e) => setCustLoginIdentifier(e.target.value)}
-                        placeholder="Contoh: 089876543210 atau budi12"
+                        placeholder="Masukkan No. WhatsApp / Email / Kode Customer"
                         className="w-full text-xs pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-teal-600"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="block text-xs font-bold text-slate-700">Password</label>
-                      <span className="text-[10px] text-slate-400">Demo: budi12</span>
-                    </div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                       <input
@@ -539,10 +554,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                 </div>
 
                 <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs font-bold text-slate-700">Password Admin</label>
-                    <span className="text-[10px] text-slate-400">Demo: admin</span>
-                  </div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Password Admin</label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input
@@ -563,6 +575,14 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                   </div>
                 </div>
 
+                {/* Default Credentials Notice */}
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-[11px] text-slate-600">
+                  <span className="text-slate-500">Kredensial Default Admin:</span>
+                  <span className="font-mono font-bold text-slate-800">
+                    Username: <span className="text-teal-700 font-bold">Admin Alinea</span> • Password: <span className="text-teal-700 font-bold">admin123</span>
+                  </span>
+                </div>
+
                 <button
                   type="submit"
                   className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl text-xs transition shadow-md shadow-slate-900/20 flex items-center justify-center gap-2"
@@ -571,41 +591,6 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
                   <span>Masuk ke Panel Administrator</span>
                 </button>
               </form>
-
-              {/* Demo Admin Shortcuts */}
-              {demoAdmins.length > 0 && (
-                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                  <p className="text-[11px] font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                    Pilih Akun Demo Admin Siap Pakai:
-                  </p>
-                  <div className="space-y-1.5">
-                    {demoAdmins.map((admin) => (
-                      <button
-                        key={admin.ID}
-                        type="button"
-                        onClick={() => handleQuickAdminLogin(admin)}
-                        className="w-full bg-white hover:bg-slate-100 border border-slate-200 p-2 rounded-xl text-left flex items-center justify-between transition group"
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">
-                            ADM
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-slate-800 group-hover:text-teal-700">
-                              {admin.Nama}
-                            </p>
-                            <p className="text-[10px] text-slate-400">{admin.NoWA} • pass: {admin.Password}</p>
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
-                          Masuk Langsung
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

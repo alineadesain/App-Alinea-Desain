@@ -12,7 +12,8 @@ import {
   Layers,
   FileCode,
   ShieldCheck,
-  ArrowRight
+  ArrowRight,
+  UploadCloud
 } from 'lucide-react';
 import { StoreData } from '../types';
 
@@ -21,6 +22,7 @@ interface AdminGasSyncManagerProps {
   onUpdateStoreData: (updatedStoreData: Partial<StoreData>) => void;
   onOpenGasModal: () => void;
   onTriggerSyncNow: (url: string) => Promise<{ success: boolean; message: string }>;
+  onPushAllToGas?: (url: string) => Promise<{ success: boolean; message: string }>;
   counts: {
     users: number;
     products: number;
@@ -34,10 +36,12 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
   onUpdateStoreData,
   onOpenGasModal,
   onTriggerSyncNow,
+  onPushAllToGas,
   counts
 }) => {
   const [webAppUrl, setWebAppUrl] = useState(storeData.gas_web_app_url || '');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{
     type: 'idle' | 'success' | 'error';
     message: string;
@@ -67,7 +71,7 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
     setIsSyncing(true);
     setSyncStatus({
       type: 'idle',
-      message: 'Menghubungkan & menyinkronkan data dengan Google Spreadsheet...'
+      message: 'Menghubungkan & menarik data terbaru dari Google Spreadsheet...'
     });
 
     try {
@@ -96,6 +100,45 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
       });
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handlePushAllData = async () => {
+    const trimmedUrl = webAppUrl.trim();
+    if (!trimmedUrl) {
+      setSyncStatus({
+        type: 'error',
+        message: 'Silakan masukkan URL Web App Google Apps Script terlebih dahulu!'
+      });
+      return;
+    }
+
+    setIsPushing(true);
+    setSyncStatus({
+      type: 'idle',
+      message: 'Mengirimkan seluruh data (Pesanan, Produk, Customer, Pengeluaran) ke Google Spreadsheet...'
+    });
+
+    try {
+      onUpdateStoreData({
+        gas_web_app_url: trimmedUrl,
+        last_synced_at: new Date().toISOString()
+      });
+
+      if (onPushAllToGas) {
+        const res = await onPushAllToGas(trimmedUrl);
+        setSyncStatus({
+          type: res.success ? 'success' : 'error',
+          message: res.message
+        });
+      }
+    } catch (err: any) {
+      setSyncStatus({
+        type: 'error',
+        message: `Gagal mengirim data ke Spreadsheet: ${err?.message || 'Koneksi terputus'}`
+      });
+    } finally {
+      setIsPushing(false);
     }
   };
 
@@ -174,15 +217,30 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
                 className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl font-mono focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
               />
             </div>
-            <button
-              type="button"
-              onClick={handleSyncNow}
-              disabled={isSyncing}
-              className="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold px-4 py-3 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-2 shrink-0 disabled:opacity-50 cursor-pointer"
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Menyinkronkan...' : 'Sync Now (Sinkronkan Sekarang)'}</span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleSyncNow}
+                disabled={isSyncing || isPushing}
+                title="Tarik data terbaru dari Google Spreadsheet ke aplikasi"
+                className="bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold px-4 py-3 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'Menyinkronkan...' : 'Sync Now (Tarik Data)'}</span>
+              </button>
+              {onPushAllToGas && (
+                <button
+                  type="button"
+                  onClick={handlePushAllData}
+                  disabled={isSyncing || isPushing}
+                  title="Kirim seluruh data pesanan, produk, customer & kas yang ada ke Google Spreadsheet"
+                  className="bg-teal-700 hover:bg-teal-800 active:scale-[0.99] text-white font-bold px-4 py-3 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  <UploadCloud className={`w-4 h-4 ${isPushing ? 'animate-bounce' : ''}`} />
+                  <span>{isPushing ? 'Mengirim Data...' : 'Kirim Semua ke Sheet'}</span>
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex items-center justify-between mt-1.5 text-[10px]">
             <span className={isValidUrl ? 'text-emerald-600 font-medium' : 'text-slate-400'}>

@@ -24,6 +24,19 @@ import { LoginPortalModal } from './components/LoginPortalModal';
 import { AdminStoreBrandingManager } from './components/AdminStoreBrandingManager';
 import { AdminGasSyncManager } from './components/AdminGasSyncManager';
 import { AdminWhatsAppConfigManager } from './components/AdminWhatsAppConfigManager';
+import {
+  pushAllDatabaseToGas,
+  fetchAllDataFromGas,
+  syncGasNewOrder,
+  syncGasUpdateOrderStatus,
+  syncGasUpdateOrderBayar,
+  syncGasDeleteOrder,
+  syncGasNewCustomer,
+  syncGasProduct,
+  syncGasDeleteProduct,
+  syncGasExpense,
+  syncGasDeleteExpense
+} from './services/gasSyncService';
 
 import {
   Home,
@@ -62,7 +75,9 @@ import {
   Wallet,
   Check,
   LogIn,
-  Shield
+  Shield,
+  Building2,
+  Database
 } from 'lucide-react';
 
 export default function App() {
@@ -307,6 +322,13 @@ export default function App() {
       orders: [unifiedOrder, ...prev.orders]
     }));
 
+    // Otomatis sinkronkan pesanan baru ke Google Apps Script Spreadsheet
+    if (appData.storeData.gas_web_app_url) {
+      syncGasNewOrder(appData.storeData.gas_web_app_url, unifiedOrder).catch((e) =>
+        console.warn('Sync order ke GAS:', e)
+      );
+    }
+
     showToast(`Sukses! Pesanan ${unifiedOrder.ID} (${orderItems.length} produk) berhasil dikirim.`);
     setOrderCatatan('');
     setOrderNominalDP('');
@@ -336,6 +358,19 @@ export default function App() {
       ...prev,
       orders: prev.orders.map((o) => (o.ID === orderId ? { ...o, StatusOrder: newStatus } : o))
     }));
+
+    // Otomatis sinkronkan perubahan status ke Google Spreadsheet
+    if (appData.storeData.gas_web_app_url) {
+      const ord = appData.orders.find((o) => o.ID === orderId);
+      syncGasUpdateOrderStatus(
+        appData.storeData.gas_web_app_url,
+        orderId,
+        newStatus,
+        ord?.NoCustomer,
+        `Produk: ${ord?.NamaProduk || '-'} (Qty: ${ord?.Qty || 1}) - Total: ${formatRp(ord?.TotalHarga || 0)}`
+      ).catch((e) => console.warn('Sync status ke GAS:', e));
+    }
+
     showToast(`Status pesanan ${orderId} diubah ke: ${newStatus}`);
   };
 
@@ -344,7 +379,35 @@ export default function App() {
       ...prev,
       orders: prev.orders.map((o) => (o.ID === orderId ? { ...o, StatusBayar: newBayar } : o))
     }));
+
+    // Otomatis sinkronkan status bayar ke Google Spreadsheet
+    if (appData.storeData.gas_web_app_url) {
+      syncGasUpdateOrderBayar(appData.storeData.gas_web_app_url, orderId, newBayar).catch((e) =>
+        console.warn('Sync bayar ke GAS:', e)
+      );
+    }
+
     showToast(`Status bayar pesanan ${orderId} diubah ke: ${newBayar}`);
+  };
+
+  // Hapus pesanan (Admin)
+  const handleDeleteOrder = (orderId: string) => {
+    const ord = appData.orders.find((o) => o.ID === orderId);
+    if (!ord) return;
+    if (window.confirm(`Yakin ingin menghapus pesanan ${orderId} (${ord.NamaProduk})?`)) {
+      setAppData((prev) => ({
+        ...prev,
+        orders: prev.orders.filter((o) => o.ID !== orderId)
+      }));
+
+      // Otomatis sinkronkan penghapusan pesanan ke Google Spreadsheet
+      if (appData.storeData.gas_web_app_url) {
+        syncGasDeleteOrder(appData.storeData.gas_web_app_url, orderId).catch((e) =>
+          console.warn('Sync hapus pesanan ke GAS:', e)
+        );
+      }
+      showToast(`Pesanan ${orderId} berhasil dihapus.`);
+    }
   };
 
   // Expense Handlers
@@ -353,6 +416,14 @@ export default function App() {
       ...prev,
       expenses: [newExp, ...prev.expenses]
     }));
+
+    // Otomatis sinkronkan pengeluaran ke Google Spreadsheet
+    if (appData.storeData.gas_web_app_url) {
+      syncGasExpense(appData.storeData.gas_web_app_url, newExp).catch((e) =>
+        console.warn('Sync pengeluaran ke GAS:', e)
+      );
+    }
+
     showToast(`Pengeluaran ${formatRp(newExp.Total)} (${newExp.Toko}) berhasil dicatat!`);
   };
 
@@ -364,6 +435,14 @@ export default function App() {
         ...prev,
         expenses: prev.expenses.filter((e) => e.ID !== expId)
       }));
+
+      // Otomatis sinkronkan hapus pengeluaran ke Google Spreadsheet
+      if (appData.storeData.gas_web_app_url) {
+        syncGasDeleteExpense(appData.storeData.gas_web_app_url, expId).catch((e) =>
+          console.warn('Sync hapus pengeluaran ke GAS:', e)
+        );
+      }
+
       showToast('Catatan pengeluaran berhasil dihapus.');
     }
   };
@@ -469,6 +548,14 @@ export default function App() {
       }
       return { ...prev, products: updatedProducts };
     });
+
+    // Otomatis sinkronkan produk ke Google Spreadsheet
+    if (appData.storeData.gas_web_app_url) {
+      syncGasProduct(appData.storeData.gas_web_app_url, product).catch((e) =>
+        console.warn('Sync produk ke GAS:', e)
+      );
+    }
+
     showToast(`Produk "${product.Nama}" berhasil disimpan!`);
   };
 
@@ -480,6 +567,14 @@ export default function App() {
         ...prev,
         products: prev.products.filter((p) => p.ID !== productId)
       }));
+
+      // Otomatis sinkronkan hapus produk ke Google Spreadsheet
+      if (appData.storeData.gas_web_app_url) {
+        syncGasDeleteProduct(appData.storeData.gas_web_app_url, productId).catch((e) =>
+          console.warn('Sync hapus produk ke GAS:', e)
+        );
+      }
+
       showToast(`Produk "${prod.Nama}" berhasil dihapus.`);
     }
   };
@@ -508,6 +603,19 @@ export default function App() {
         orders: [order, ...prev.orders]
       };
     });
+
+    // Otomatis sinkronkan pesanan admin & customer baru ke Google Spreadsheet
+    if (appData.storeData.gas_web_app_url) {
+      if (newCustomer) {
+        syncGasNewCustomer(appData.storeData.gas_web_app_url, newCustomer).catch((e) =>
+          console.warn('Sync customer baru ke GAS:', e)
+        );
+      }
+      syncGasNewOrder(appData.storeData.gas_web_app_url, order).catch((e) =>
+        console.warn('Sync pesanan admin ke GAS:', e)
+      );
+    }
+
     showToast(
       newCustomer
         ? `Customer "${newCustomer.Nama}" & Pesanan ${order.ID} tersimpan!`
@@ -538,18 +646,18 @@ export default function App() {
     }));
   };
 
-  // Trigger Sync Now for Google Apps Script Web App URL
+  // Trigger Sync Now for Google Apps Script Web App URL (Tarik Data dari Spreadsheet)
   const handleTriggerGasSyncNow = async (url: string): Promise<{ success: boolean; message: string }> => {
     // 1. If running inside Google Apps Script (iframe or GAS runtime)
     if (typeof (window as any).google !== 'undefined' && (window as any).google.script?.run) {
       return new Promise<{ success: boolean; message: string }>((resolve) => {
         (window as any).google.script.run
           .withSuccessHandler((remoteData: any) => {
-            if (remoteData && remoteData.users) {
+            if (remoteData && (remoteData.users || remoteData.orders || remoteData.products)) {
               setAppData((prev) => ({
                 ...prev,
-                users: remoteData.users || prev.users,
-                products: remoteData.products || prev.products,
+                users: (remoteData.users && remoteData.users.length > 0) ? remoteData.users : prev.users,
+                products: (remoteData.products && remoteData.products.length > 0) ? remoteData.products : prev.products,
                 orders: remoteData.orders || prev.orders,
                 expenses: remoteData.expenses || prev.expenses,
                 storeData: {
@@ -580,39 +688,30 @@ export default function App() {
       });
     }
 
-    // 2. If running on Web / Dev server: test fetch URL
-    try {
-      const fetchUrl = url.includes('?') ? `${url}&action=fetchAllData` : `${url}?action=fetchAllData`;
-      const response = await fetch(fetchUrl, {
-        method: 'GET',
-        headers: { Accept: 'application/json' }
-      });
-      if (response.ok) {
-        const remoteData = await response.json();
-        if (remoteData && (remoteData.products || remoteData.orders)) {
-          setAppData((prev) => ({
-            ...prev,
-            users: remoteData.users || prev.users,
-            products: remoteData.products || prev.products,
-            orders: remoteData.orders || prev.orders,
-            expenses: remoteData.expenses || prev.expenses,
-            storeData: {
-              ...prev.storeData,
-              ...(remoteData.storeData || {}),
-              gas_web_app_url: url,
-              last_synced_at: new Date().toISOString()
-            }
-          }));
-          return {
-            success: true,
-            message: `Koneksi Web App URL Terverifikasi! Berhasil sinkronisasi (${remoteData.orders?.length || 0} Pesanan & ${remoteData.products?.length || 0} Produk tersinkron).`
-          };
+    // 2. If running on Web / Dev server: using fetchAllDataFromGas
+    const res = await fetchAllDataFromGas(url);
+    if (res.success && res.data) {
+      const remoteData = res.data;
+      setAppData((prev) => ({
+        ...prev,
+        users: (remoteData.users && remoteData.users.length > 0) ? remoteData.users : prev.users,
+        products: (remoteData.products && remoteData.products.length > 0) ? remoteData.products : prev.products,
+        orders: remoteData.orders || prev.orders,
+        expenses: remoteData.expenses || prev.expenses,
+        storeData: {
+          ...prev.storeData,
+          ...(remoteData.storeData || {}),
+          gas_web_app_url: url,
+          last_synced_at: new Date().toISOString()
         }
-      }
-    } catch {
-      // In web preview, CORS may prevent direct GET, but we still persist and verify URL format
+      }));
+      return {
+        success: true,
+        message: `Koneksi Google Sheets Terhubung! Berhasil menyinkronkan ${remoteData.orders?.length || 0} Pesanan & ${remoteData.products?.length || 0} Produk.`
+      };
     }
 
+    // Still persist the URL even if fetch didn't return data (e.g. initial empty sheet)
     setAppData((prev) => ({
       ...prev,
       storeData: {
@@ -624,15 +723,56 @@ export default function App() {
 
     return {
       success: true,
-      message: 'Web App URL berhasil disimpan & diverifikasi! Tersambung ke Google Spreadsheet backend.'
+      message: 'Web App URL berhasil disimpan! Gunakan tombol "Kirim Semua ke Sheet" untuk mengunggah seluruh database yang ada.'
     };
+  };
+
+  // Push / Unggah Seluruh Database Lokal Langsung ke Google Spreadsheet Sekaligus
+  const handlePushAllDatabaseToGas = async (url: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await pushAllDatabaseToGas(url, {
+        users: appData.users,
+        products: appData.products,
+        orders: appData.orders,
+        expenses: appData.expenses,
+        storeData: appData.storeData
+      });
+
+      setAppData((prev) => ({
+        ...prev,
+        storeData: {
+          ...prev.storeData,
+          gas_web_app_url: url,
+          last_synced_at: new Date().toISOString()
+        }
+      }));
+
+      if (res.success) {
+        return {
+          success: true,
+          message: `Berhasil mengekspor seluruh data ke Google Sheets! (${appData.orders.length} Pesanan, ${appData.products.length} Produk, ${appData.users.length} Akun, dan ${appData.expenses.length} Catatan Kas terunggah).`
+        };
+      } else {
+        return {
+          success: false,
+          message: res.message || 'Gagal mengirim data ke Google Sheets.'
+        };
+      }
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Kendala pengiriman data: ${err?.message || 'Koneksi terputus'}`
+      };
+    }
   };
 
   // Handle successful login or registration from LoginPortalModal
   const handleAuthLoginSuccess = (user: User) => {
+    let isNew = false;
     setAppData((prev) => {
       const exists = prev.users.some((u) => u.ID === user.ID || (u.Email && u.Email === user.Email));
       if (!exists) {
+        isNew = true;
         return { ...prev, users: [user, ...prev.users] };
       }
       // Update with latest user details if needed
@@ -641,6 +781,13 @@ export default function App() {
         users: prev.users.map((u) => (u.ID === user.ID ? { ...u, ...user } : u))
       };
     });
+
+    // Otomatis sinkronkan pendaftaran customer baru ke Google Spreadsheet
+    if (isNew && user.Role === 'customer' && appData.storeData.gas_web_app_url) {
+      syncGasNewCustomer(appData.storeData.gas_web_app_url, user).catch((e) =>
+        console.warn('Sync customer baru ke GAS:', e)
+      );
+    }
     setCurrentUser(user);
     setCurrentRole(user.Role);
     saveAuthUserId(user.ID); // Persist login session to localStorage
@@ -701,6 +848,28 @@ export default function App() {
   const customerOrders = currentUser
     ? appData.orders.filter((o) => o.KodeCustomer === currentUser.KodeKhusus)
     : [];
+
+  // JIKA BELUM LOGIN: Arahkan LANGSUNG ke tampilan portal login sebelum semua user masuk ke aplikasi!
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-3 selection:bg-teal-600 selection:text-white">
+        {showSuccessToast && (
+          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold backdrop-blur-sm border border-slate-700 animate-in fade-in slide-in-from-top-3">
+            <CheckCircle2 className="w-4 h-4 text-teal-400" />
+            <span>{showSuccessToast}</span>
+          </div>
+        )}
+        <LoginPortalModal
+          isOpen={true}
+          canClose={false}
+          storeData={appData.storeData}
+          existingUsers={appData.users}
+          onLoginSuccess={handleAuthLoginSuccess}
+          initialRole={portalInitialRole}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 flex justify-center selection:bg-teal-600 selection:text-white">
@@ -2004,12 +2173,23 @@ export default function App() {
                                 </div>
                               </div>
 
-                              <div className="flex justify-end gap-2 pt-1">
+                              <div className="flex items-center justify-between pt-1">
                                 <button
-                                  onClick={() => setSelectedOrderForDetail(ord)}
-                                  className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg border border-teal-200 transition"
+                                  type="button"
+                                  onClick={() => handleDeleteOrder(ord.ID)}
+                                  className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg border border-transparent hover:border-rose-200 transition flex items-center gap-1"
+                                  title="Hapus pesanan ini"
                                 >
-                                  Lihat Rincian Pesanan
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Hapus</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedOrderForDetail(ord)}
+                                  className="text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg border border-teal-200 transition flex items-center gap-1"
+                                >
+                                  <span>Lihat Rincian Pesanan</span>
+                                  <ChevronRight className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             </div>
@@ -2224,43 +2404,105 @@ export default function App() {
               {/* 5. TOKO & PENGATURAN SLIDER */}
               {activeAdminMenu === 'toko' && (
                 <div className="p-4 space-y-4">
-                  {/* PENGATURAN LOGO DAN NAMA TOKO (BRANDING) */}
+                  {/* HEADER MENU TOKO */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 shrink-0">
+                        <Store className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h2 className="font-bold text-sm text-slate-800">Manajemen Toko & Outlet</h2>
+                        <p className="text-[11px] text-slate-500">Kelola identitas, info kontak, tampilan beranda, dan integrasi sistem</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 1. PENGATURAN LOGO DAN NAMA TOKO (BRANDING) */}
                   <AdminStoreBrandingManager
                     storeData={appData.storeData}
                     onSaveBranding={handleSaveBranding}
                   />
 
-                  {/* INTEGRASI WEB APP URL GOOGLE SHEETS & SYNC NOW */}
-                  <AdminGasSyncManager
-                    storeData={appData.storeData}
-                    onUpdateStoreData={handleUpdateStoreDataPartial}
-                    onOpenGasModal={() => setShowGasModal(true)}
-                    onTriggerSyncNow={handleTriggerGasSyncNow}
-                    counts={{
-                      users: appData.users.length,
-                      products: appData.products.length,
-                      orders: appData.orders.length,
-                      expenses: appData.expenses.length
-                    }}
-                  />
-
-                  {/* KONFIGURASI API WHATSAPP (FONNTE / FONTE / FLOWKIRIM / DSB) */}
-                  <AdminWhatsAppConfigManager
-                    storeData={appData.storeData}
-                    onSaveConfig={handleUpdateStoreDataPartial}
-                    showToast={showToast}
-                  />
-
-                  {/* General Store Settings */}
+                  {/* 2. PENGATURAN INFORMASI OUTLET & KONTAK */}
                   <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 text-xs">
                     <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
-                      <Settings className="w-4 h-4 text-teal-600" />
-                      <span>Pengaturan Teks Berjalan & Informasi Toko</span>
+                      <Building2 className="w-4 h-4 text-teal-600" />
+                      <span>Informasi Outlet & Rekening Pembayaran</span>
                     </h3>
 
                     <div>
                       <label className="font-bold text-slate-600 block mb-1">
-                        Running Text Beranda Customer
+                        Alamat Percetakan
+                      </label>
+                      <input
+                        type="text"
+                        value={appData.storeData.alamat}
+                        onChange={(e) =>
+                          setAppData((prev) => ({
+                            ...prev,
+                            storeData: { ...prev.storeData, alamat: e.target.value }
+                          }))
+                        }
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                        placeholder="Alamat fisik workshop / outlet"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-600 block mb-1">
+                        Kontak WhatsApp CS Toko
+                      </label>
+                      <input
+                        type="text"
+                        value={appData.storeData.kontak}
+                        onChange={(e) =>
+                          setAppData((prev) => ({
+                            ...prev,
+                            storeData: { ...prev.storeData, kontak: e.target.value }
+                          }))
+                        }
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                        placeholder="08xxxxxxxxxx"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-slate-600 block mb-1">
+                        Rekening Bank Toko (BCA / Mandiri / BRI)
+                      </label>
+                      <input
+                        type="text"
+                        value={appData.storeData.rekening}
+                        onChange={(e) =>
+                          setAppData((prev) => ({
+                            ...prev,
+                            storeData: { ...prev.storeData, rekening: e.target.value }
+                          }))
+                        }
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                        placeholder="BCA 1234567890 a/n Alinea Percetakan"
+                      />
+                    </div>
+
+                    <button
+                      onClick={() => showToast('Pengaturan informasi toko berhasil disimpan!')}
+                      className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Simpan Informasi Toko</span>
+                    </button>
+                  </div>
+
+                  {/* 3. PENGATURAN RUNNING TEXT & KECEPATAN */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 text-xs">
+                    <h3 className="font-bold text-sm text-slate-800 border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                      <Settings className="w-4 h-4 text-teal-600" />
+                      <span>Teks Berjalan Beranda (Running Text)</span>
+                    </h3>
+
+                    <div>
+                      <label className="font-bold text-slate-600 block mb-1">
+                        Isi Teks Pengumuman / Promo Berjalan
                       </label>
                       <textarea
                         value={appData.storeData.running_text}
@@ -2274,12 +2516,11 @@ export default function App() {
                       />
                     </div>
 
-                    {/* NEW: PENGATURAN KECEPATAN RUNNING TEXT */}
                     <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="font-bold text-slate-700 flex items-center gap-1.5">
                           <Gauge className="w-3.5 h-3.5 text-teal-600" />
-                          <span>Kecepatan Animasi Running Text</span>
+                          <span>Kecepatan Animasi Teks</span>
                         </label>
                         <span className="font-mono font-bold text-teal-700 text-xs">
                           {appData.storeData.running_text_speed || 22}s
@@ -2334,76 +2575,31 @@ export default function App() {
                         </div>
                       </div>
                       <p className="text-[10px] text-slate-400">
-                        * Angka lebih kecil = teks bergerak lebih cepat. Perubahan langsung terlihat di beranda customer.
+                        * Angka lebih kecil = teks bergerak lebih cepat.
                       </p>
                     </div>
 
-                    <div>
-                      <label className="font-bold text-slate-600 block mb-1">
-                        Alamat Percetakan
-                      </label>
-                      <input
-                        type="text"
-                        value={appData.storeData.alamat}
-                        onChange={(e) =>
-                          setAppData((prev) => ({
-                            ...prev,
-                            storeData: { ...prev.storeData, alamat: e.target.value }
-                          }))
-                        }
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="font-bold text-slate-600 block mb-1">
-                        Kontak WhatsApp CS
-                      </label>
-                      <input
-                        type="text"
-                        value={appData.storeData.kontak}
-                        onChange={(e) =>
-                          setAppData((prev) => ({
-                            ...prev,
-                            storeData: { ...prev.storeData, kontak: e.target.value }
-                          }))
-                        }
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="font-bold text-slate-600 block mb-1">
-                        Rekening Bank Toko
-                      </label>
-                      <input
-                        type="text"
-                        value={appData.storeData.rekening}
-                        onChange={(e) =>
-                          setAppData((prev) => ({
-                            ...prev,
-                            storeData: { ...prev.storeData, rekening: e.target.value }
-                          }))
-                        }
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono"
-                      />
-                    </div>
-
                     <button
-                      onClick={() => showToast('Pengaturan informasi toko berhasil disimpan!')}
+                      onClick={() => showToast('Teks berjalan berhasil diperbarui!')}
                       className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs"
                     >
-                      Simpan Data Toko
+                      Perbarui Teks Berjalan
                     </button>
                   </div>
 
-                  {/* NEW FEATURE: PENGATURAN BANNER PROMO CUSTOMER */}
+                  {/* 4. BANNER PROMO BERANDA CUSTOMER */}
                   <AdminBannerManager
                     banners={appData.storeData.banners || []}
                     onUpdateBanners={handleUpdateBanners}
                   />
 
-                  {/* PENGATURAN PROFIL & PASSWORD ADMIN */}
+                  {/* 5. SLIDER PORTOFOLIO / KLIEN CUSTOMER */}
+                  <AdminTokoSliderManager
+                    clients={appData.storeData.clients_slider || []}
+                    onUpdateClients={handleUpdateClients}
+                  />
+
+                  {/* 6. PENGATURAN PROFIL & PASSWORD ADMIN */}
                   <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 text-xs">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                       <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
@@ -2484,17 +2680,53 @@ export default function App() {
                         <LogOut className="w-3.5 h-3.5" />
                         <span>Keluar dari Akun Admin</span>
                       </button>
-                      <p className="text-[10px] text-slate-400 text-center mt-1.5">
-                        Keluar akun terlebih dahulu untuk masuk dengan akun lain
-                      </p>
                     </div>
                   </div>
 
-                  {/* PENGATURAN GAMBAR & KETERANGAN SLIDER CUSTOMER */}
-                  <AdminTokoSliderManager
-                    clients={appData.storeData.clients_slider || []}
-                    onUpdateClients={handleUpdateClients}
-                  />
+                  {/* ======================================================== */}
+                  {/* 7. INTEGRASI SISTEM & DATABASE EKSTERNAL (DI PALING BAWAH) */}
+                  {/* ======================================================== */}
+                  <div className="pt-4 border-t-2 border-dashed border-slate-200 space-y-4">
+                    <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-md flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-mono tracking-wider uppercase text-teal-400 font-bold block">
+                          Backend & Otomatisasi
+                        </span>
+                        <h3 className="font-extrabold text-sm text-white flex items-center gap-2 mt-0.5">
+                          <Database className="w-4 h-4 text-teal-400" />
+                          <span>Integrasi Google Sheets & WhatsApp API</span>
+                        </h3>
+                        <p className="text-[11px] text-slate-300 mt-0.5">
+                          Konfigurasi sinkronisasi spreadsheet dan notifikasi pesan otomatis
+                        </p>
+                      </div>
+                      <span className="bg-teal-500/20 text-teal-300 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-teal-500/30">
+                        Integrasi
+                      </span>
+                    </div>
+
+                    {/* INTEGRASI WEB APP URL GOOGLE SHEETS & SYNC NOW */}
+                    <AdminGasSyncManager
+                      storeData={appData.storeData}
+                      onUpdateStoreData={handleUpdateStoreDataPartial}
+                      onOpenGasModal={() => setShowGasModal(true)}
+                      onTriggerSyncNow={handleTriggerGasSyncNow}
+                      onPushAllToGas={handlePushAllDatabaseToGas}
+                      counts={{
+                        users: appData.users.length,
+                        products: appData.products.length,
+                        orders: appData.orders.length,
+                        expenses: appData.expenses.length
+                      }}
+                    />
+
+                    {/* KONFIGURASI API WHATSAPP (FONNTE / FONTE / FLOWKIRIM / DSB) */}
+                    <AdminWhatsAppConfigManager
+                      storeData={appData.storeData}
+                      onSaveConfig={handleUpdateStoreDataPartial}
+                      showToast={showToast}
+                    />
+                  </div>
                 </div>
               )}
 

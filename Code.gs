@@ -17,7 +17,13 @@ function doGet(e) {
     if (action === 'fetchAllData') {
       result = fetchAllData();
     } else if (action === 'ping') {
-      result = { status: 'ok', timestamp: new Date().toISOString() };
+      result = { status: 'ok', timestamp: new Date().toISOString(), message: 'Google Apps Script Web App Terhubung!' };
+    } else if (action === 'addOrder' && e.parameter.data) {
+      try {
+        result = addOrder(JSON.parse(e.parameter.data));
+      } catch (err) {
+        result = { success: false, error: err.toString() };
+      }
     } else {
       result = { error: 'Aksi tidak dikenal' };
     }
@@ -35,23 +41,48 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
-    const action = data.action;
+    const contents = (e && e.postData && e.postData.contents) ? e.postData.contents : '{}';
+    const data = JSON.parse(contents);
+    const action = data.action || (e && e.parameter && e.parameter.action);
 
-    let result = { success: false, message: 'Invalid action' };
+    let result = { success: false, message: 'Invalid action: ' + action };
 
     if (action === 'fetchAllData') {
       result = fetchAllData();
+    } else if (action === 'ping') {
+      result = { status: 'ok', timestamp: new Date().toISOString(), message: 'Connected' };
     } else if (action === 'addOrder') {
-      result = addOrder(data.order);
+      result = addOrder(data.order || data);
+    } else if (action === 'updateOrderStatus') {
+      result = updateOrderStatus(data.orderId, data.status, data.noCustomer, data.orderDetailText);
+    } else if (action === 'updateOrderBayar') {
+      result = updateOrderBayar(data.orderId, data.statusBayar);
+    } else if (action === 'deleteOrder') {
+      result = deleteOrder(data.id || data.orderId);
+    } else if (action === 'registerCustomer' || action === 'addUser') {
+      result = registerCustomer(data.user || data);
+    } else if (action === 'updateCustomerProfile') {
+      result = updateCustomerProfile(data.user || data);
+    } else if (action === 'updateAdminProfile') {
+      result = updateAdminProfile(data.admin || data);
+    } else if (action === 'addProduct') {
+      result = addProduct(data.product || data);
+    } else if (action === 'deleteProduct') {
+      result = deleteProduct(data.id || data.productId);
+    } else if (action === 'addExpense') {
+      result = addExpense(data.expense || data);
+    } else if (action === 'deleteExpense') {
+      result = deleteExpense(data.id || data.expenseId);
     } else if (action === 'saveAllStoreData') {
-      result = saveAllStoreData(data.storeData);
+      result = saveAllStoreData(data.storeData || data);
+    } else if (action === 'syncFullDatabase') {
+      result = syncFullDatabase(data.database || data);
     }
 
     return ContentService.createTextOutput(JSON.stringify(result))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ error: err.toString() }))
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
@@ -366,6 +397,138 @@ function updateOrderBayar(orderId, statusBayar) {
       }
     }
     return { success: false, message: 'Pesanan tidak ditemukan' };
+  } catch (err) {
+    return { success: false, message: err.toString() };
+  }
+}
+
+// Hapus Pesanan
+function deleteOrder(orderId) {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Orders');
+    if (!sheet) return { success: false };
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(orderId)) {
+        sheet.deleteRow(i + 1);
+        return { success: true };
+      }
+    }
+    return { success: false, message: 'Pesanan tidak ditemukan' };
+  } catch (err) {
+    return { success: false, message: err.toString() };
+  }
+}
+
+// Sinkronisasi Seluruh Database (Orders, Products, Users, Expenses, StoreData)
+function syncFullDatabase(data) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    setupDatabase();
+
+    // 1. Simpan Orders
+    if (data.orders && Array.isArray(data.orders)) {
+      const ordSheet = ss.getSheetByName('Orders');
+      if (ordSheet) {
+        const existingData = ordSheet.getDataRange().getValues();
+        const existingIds = {};
+        for (let i = 1; i < existingData.length; i++) {
+          existingIds[String(existingData[i][0])] = i + 1;
+        }
+
+        data.orders.forEach(function(ord) {
+          const ordId = String(ord.ID);
+          if (!existingIds[ordId]) {
+            ordSheet.appendRow([
+              ord.ID, ord.Tgl || new Date().toISOString(),
+              ord.KodeCustomer || '-', ord.NamaCustomer || 'Customer', ord.NoCustomer || '-',
+              ord.IDProduk || '-', ord.NamaProduk || '-', ord.Kategori || 'satuan',
+              Number(ord.Qty || 1), Number(ord.Panjang || 0), Number(ord.Lebar || 0),
+              ord.Finishing || '-', Number(ord.JasaCutting || 0), Number(ord.JasaLaminating || 0),
+              Number(ord.JasaDesain || 0), Number(ord.TotalHarga || 0),
+              ord.StatusBayar || 'Belum Lunas', ord.StatusOrder || 'Order Masuk',
+              Number(ord.DP || 0), ord.Catatan || ''
+            ]);
+            existingIds[ordId] = true;
+          }
+        });
+      }
+    }
+
+    // 2. Simpan Users
+    if (data.users && Array.isArray(data.users)) {
+      const userSheet = ss.getSheetByName('Users');
+      if (userSheet) {
+        const existingUsers = userSheet.getDataRange().getValues();
+        const userIds = {};
+        for (let i = 1; i < existingUsers.length; i++) {
+          userIds[String(existingUsers[i][0])] = true;
+        }
+        data.users.forEach(function(u) {
+          const uId = String(u.ID);
+          if (!userIds[uId]) {
+            userSheet.appendRow([
+              u.ID, u.Role || 'customer', u.KodeKhusus || '-',
+              u.Nama, u.NoWA, u.Alamat || '', u.Password, u.Email || '',
+              u.TglDaftar || new Date().toISOString()
+            ]);
+            userIds[uId] = true;
+          }
+        });
+      }
+    }
+
+    // 3. Simpan Products
+    if (data.products && Array.isArray(data.products)) {
+      const prodSheet = ss.getSheetByName('Products');
+      if (prodSheet) {
+        const existingProds = prodSheet.getDataRange().getValues();
+        const prodIds = {};
+        for (let i = 1; i < existingProds.length; i++) {
+          prodIds[String(existingProds[i][0])] = true;
+        }
+        data.products.forEach(function(p) {
+          const pId = String(p.ID);
+          if (!prodIds[pId]) {
+            prodSheet.appendRow([
+              p.ID, p.Nama, p.Kategori, Number(p.Harga) || 0,
+              p.Deskripsi || '', p.Thumbnail || '', Number(p.Terjual) || 0,
+              Number(p.HargaDesain) || 0, Number(p.HargaCutting) || 0, Number(p.HargaLaminating) || 0
+            ]);
+            prodIds[pId] = true;
+          }
+        });
+      }
+    }
+
+    // 4. Simpan Expenses
+    if (data.expenses && Array.isArray(data.expenses)) {
+      const expSheet = ss.getSheetByName('Expenses');
+      if (expSheet) {
+        const existingExps = expSheet.getDataRange().getValues();
+        const expIds = {};
+        for (let i = 1; i < existingExps.length; i++) {
+          expIds[String(existingExps[i][0])] = true;
+        }
+        data.expenses.forEach(function(ex) {
+          const exId = String(ex.ID);
+          if (!expIds[exId]) {
+            expSheet.appendRow([
+              ex.ID, ex.Tgl || new Date().toISOString().split('T')[0],
+              Number(ex.Total || 0), ex.Toko || '', ex.Detail || '', ex.NotaUrl || ''
+            ]);
+            expIds[exId] = true;
+          }
+        });
+      }
+    }
+
+    // 5. Simpan StoreData
+    if (data.storeData) {
+      saveAllStoreData(data.storeData);
+    }
+
+    return { success: true, message: 'Seluruh database berhasil disinkronkan ke Spreadsheet!' };
   } catch (err) {
     return { success: false, message: err.toString() };
   }

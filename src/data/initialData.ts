@@ -168,7 +168,7 @@ export const DEFAULT_USERS: User[] = [
     Nama: 'Admin Alinea',
     NoWA: '081234567890',
     Alamat: 'Jl. Prof. Dr. Sardjito No. 45, Yogyakarta',
-    Password: 'admin',
+    Password: 'admin123',
     TglDaftar: '2025-01-01T08:00:00.000Z',
     Email: 'alineadesain@gmail.com',
     Avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80'
@@ -180,7 +180,7 @@ export const DEFAULT_USERS: User[] = [
     Nama: 'Kasir & CS Alinea',
     NoWA: '081987654321',
     Alamat: 'Outlet Alinea Gondokusuman',
-    Password: 'kasir',
+    Password: 'admin123',
     TglDaftar: '2025-01-15T08:00:00.000Z',
     Email: 'kasir.alinea@gmail.com',
     Avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80'
@@ -342,9 +342,27 @@ export function loadStoredData(): AppStateData {
       return initial;
     }
     const parsed = JSON.parse(raw);
+    let loadedUsers: User[] = (parsed.users && parsed.users.length > 0) ? parsed.users : DEFAULT_USERS;
+    
+    // Ensure default admin user Admin Alinea has password admin123
+    let adminFound = false;
+    loadedUsers = loadedUsers.map(u => {
+      if (u.Role === 'admin') {
+        adminFound = true;
+        if (u.Nama.toLowerCase() === 'admin alinea' || u.ID === 'U1') {
+          return { ...u, Nama: 'Admin Alinea', Password: 'admin123' };
+        }
+      }
+      return u;
+    });
+
+    if (!adminFound) {
+      loadedUsers.unshift(DEFAULT_USERS[0]);
+    }
+
     // Ensure all arrays and nested objects are present
     return {
-      users: (parsed.users && parsed.users.length > 0) ? parsed.users : DEFAULT_USERS,
+      users: loadedUsers,
       products: (parsed.products && parsed.products.length > 0) ? parsed.products : DEFAULT_PRODUCTS,
       orders: parsed.orders || DEFAULT_ORDERS,
       expenses: parsed.expenses || DEFAULT_EXPENSES,
