@@ -89,9 +89,9 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
     const term = customerSearch.toLowerCase();
     return customers.filter(
       (c) =>
-        c.Nama.toLowerCase().includes(term) ||
-        c.KodeKhusus.includes(term) ||
-        c.NoWA.includes(term)
+        String(c.Nama || '').toLowerCase().includes(term) ||
+        String(c.KodeKhusus || '').toLowerCase().includes(term) ||
+        String(c.NoWA || '').includes(term)
     );
   }, [customers, customerSearch]);
 
@@ -270,6 +270,8 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
       JasaDesain: orderItemsBuilt.reduce((s, it) => s + (it.jasaDesain || 0), 0),
       TotalHarga: grandTotal,
       NominalDP: dpAmount > 0 ? dpAmount : undefined,
+      DP: dpAmount,
+      SisaTagihan: sisaTagihan,
       StatusBayar: finalStatusBayar,
       StatusOrder: statusOrder,
       Catatan: catatan.trim() || undefined,

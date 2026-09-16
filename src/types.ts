@@ -61,6 +61,8 @@ export interface Order {
   JasaDesain: number;
   TotalHarga: number;
   NominalDP?: number;
+  DP?: number;
+  SisaTagihan?: number;
   StatusBayar: 'Belum Lunas' | 'DP' | 'Lunas';
   StatusOrder: 'Order Masuk' | 'Proses' | 'Selesai';
   Catatan?: string;

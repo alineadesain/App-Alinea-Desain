@@ -344,16 +344,28 @@ export function loadStoredData(): AppStateData {
     const parsed = JSON.parse(raw);
     let loadedUsers: User[] = (parsed.users && parsed.users.length > 0) ? parsed.users : DEFAULT_USERS;
     
-    // Ensure default admin user Admin Alinea has password admin123
+    // Ensure default admin user Admin Alinea has password admin123 & normalize user strings
     let adminFound = false;
     loadedUsers = loadedUsers.map(u => {
-      if (u.Role === 'admin') {
+      const normalized: User = {
+        ...u,
+        ID: String(u.ID || ''),
+        Role: (u.Role === 'admin' ? 'admin' : 'customer') as 'admin' | 'customer',
+        KodeKhusus: String(u.KodeKhusus ?? '-'),
+        Nama: String(u.Nama ?? ''),
+        NoWA: String(u.NoWA ?? ''),
+        Alamat: String(u.Alamat ?? ''),
+        Password: String(u.Password ?? ''),
+        Email: u.Email ? String(u.Email) : undefined,
+        TglDaftar: u.TglDaftar ? String(u.TglDaftar) : new Date().toISOString()
+      };
+      if (normalized.Role === 'admin') {
         adminFound = true;
-        if (u.Nama.toLowerCase() === 'admin alinea' || u.ID === 'U1') {
-          return { ...u, Nama: 'Admin Alinea', Password: 'admin123' };
+        if (normalized.Nama.toLowerCase() === 'admin alinea' || normalized.ID === 'U1') {
+          return { ...normalized, Nama: 'Admin Alinea', Password: 'admin123' };
         }
       }
-      return u;
+      return normalized;
     });
 
     if (!adminFound) {

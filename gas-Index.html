@@ -403,11 +403,11 @@
               <div class="grid grid-cols-2 gap-2">
                 <div>
                   <label class="text-[10px] font-semibold text-teal-800">Panjang (cm)</label>
-                  <input type="number" id="ord_panjang" value="200" min="50" oninput="recalcOrder()" class="w-full p-2 bg-white border border-teal-200 rounded-xl text-center font-bold">
+                  <input type="number" id="ord_panjang" value="0" min="0" oninput="recalcOrder()" class="w-full p-2 bg-white border border-teal-200 rounded-xl text-center font-bold">
                 </div>
                 <div>
                   <label class="text-[10px] font-semibold text-teal-800">Lebar (cm)</label>
-                  <input type="number" id="ord_lebar" value="100" min="50" oninput="recalcOrder()" class="w-full p-2 bg-white border border-teal-200 rounded-xl text-center font-bold">
+                  <input type="number" id="ord_lebar" value="0" min="0" oninput="recalcOrder()" class="w-full p-2 bg-white border border-teal-200 rounded-xl text-center font-bold">
                 </div>
               </div>
               <div>
@@ -526,18 +526,26 @@
       let subtotal = 0;
 
       if (prod.Kategori === 'meteran') {
-        const p = Number(document.getElementById('ord_panjang')?.value || 200);
-        const l = Number(document.getElementById('ord_lebar')?.value || 100);
-        const luas = Math.max(1, (p / 100) * (l / 100));
-        subtotal = Math.round(prod.Harga * luas * qty);
+        const p = Number(document.getElementById('ord_panjang')?.value || 0);
+        const l = Number(document.getElementById('ord_lebar')?.value || 0);
+        if (p > 0 && l > 0) {
+          const luas = Math.max(1, (p / 100) * (l / 100));
+          subtotal = Math.round(prod.Harga * luas * qty);
+        } else {
+          subtotal = 0;
+        }
       } else {
         subtotal = prod.Harga * qty;
       }
 
       let jasa = 0;
-      if (document.getElementById('ord_chk_desain')?.checked) jasa += (prod.HargaDesain || 15000);
-      if (document.getElementById('ord_chk_cutting')?.checked) jasa += (prod.HargaCutting || 5000);
-      if (document.getElementById('ord_chk_laminating')?.checked) jasa += (prod.HargaLaminating || 5000);
+      const dsnPrice = prod.HargaDesain !== undefined && prod.HargaDesain !== null && prod.HargaDesain !== '' ? Number(prod.HargaDesain) : 15000;
+      const cutPrice = prod.HargaCutting !== undefined && prod.HargaCutting !== null && prod.HargaCutting !== '' ? Number(prod.HargaCutting) : 0;
+      const lamPrice = prod.HargaLaminating !== undefined && prod.HargaLaminating !== null && prod.HargaLaminating !== '' ? Number(prod.HargaLaminating) : 0;
+
+      if (document.getElementById('ord_chk_desain')?.checked) jasa += dsnPrice;
+      if (document.getElementById('ord_chk_cutting')?.checked) jasa += (cutPrice * qty);
+      if (document.getElementById('ord_chk_laminating')?.checked) jasa += (lamPrice * qty);
 
       const total = subtotal + jasa;
       const elSub = document.getElementById('calc-subtotal');
@@ -572,14 +580,22 @@
       const p = Number(document.getElementById('ord_panjang')?.value || 0);
       const l = Number(document.getElementById('ord_lebar')?.value || 0);
       const finishing = document.getElementById('ord_finishing')?.value || '-';
-      const jasaDesain = document.getElementById('ord_chk_desain').checked ? (prod.HargaDesain || 15000) : 0;
-      const jasaCutting = document.getElementById('ord_chk_cutting').checked ? (prod.HargaCutting || 5000) : 0;
-      const jasaLaminating = document.getElementById('ord_chk_laminating').checked ? (prod.HargaLaminating || 5000) : 0;
+      const dsnPrice = prod.HargaDesain !== undefined && prod.HargaDesain !== null && prod.HargaDesain !== '' ? Number(prod.HargaDesain) : 15000;
+      const cutPrice = prod.HargaCutting !== undefined && prod.HargaCutting !== null && prod.HargaCutting !== '' ? Number(prod.HargaCutting) : 0;
+      const lamPrice = prod.HargaLaminating !== undefined && prod.HargaLaminating !== null && prod.HargaLaminating !== '' ? Number(prod.HargaLaminating) : 0;
 
-      let subtotal = prod.Harga * qty;
+      const jasaDesain = document.getElementById('ord_chk_desain')?.checked ? dsnPrice : 0;
+      const jasaCutting = document.getElementById('ord_chk_cutting')?.checked ? (cutPrice * qty) : 0;
+      const jasaLaminating = document.getElementById('ord_chk_laminating')?.checked ? (lamPrice * qty) : 0;
+
+      let subtotal = 0;
       if (prod.Kategori === 'meteran') {
-        const luas = Math.max(1, (p / 100) * (l / 100));
-        subtotal = Math.round(prod.Harga * luas * qty);
+        if (p > 0 && l > 0) {
+          const luas = Math.max(1, (p / 100) * (l / 100));
+          subtotal = Math.round(prod.Harga * luas * qty);
+        }
+      } else {
+        subtotal = prod.Harga * qty;
       }
       const totalHarga = subtotal + jasaDesain + jasaCutting + jasaLaminating;
 
@@ -710,10 +726,24 @@
       const isMet = o.Kategori === 'meteran';
       const luas = isMet ? Math.max(1, ((o.Panjang||100)/100) * ((o.Lebar||100)/100)) : 0;
       const subtotalProduk = o.TotalHarga - (o.JasaDesain||0) - (o.JasaCutting||0) - (o.JasaLaminating||0);
-      const sisa = Math.max(0, o.TotalHarga - (o.DP||0));
-
+      const dpNominal = Number(o.DP || o.NominalDP || 0);
+      const sisa = o.SisaTagihan !== undefined ? Number(o.SisaTagihan) : Math.max(0, o.TotalHarga - dpNominal);
       const phone = (store.kontak || '081234567890').replace(/[^0-9]/g, '').replace(/^0/, '62');
-      const waMsg = encodeURIComponent(`Halo ${store.nama_toko}, saya konfirmasi pesanan:\nNo: ${o.ID}\nNama: ${o.NamaCustomer}\nProduk: ${o.NamaProduk} (${o.Qty} item)\nTotal: ${formatRp(o.TotalHarga)}\nStatus: ${o.StatusOrder}`);
+      const waMsg = encodeURIComponent(
+        `Halo Kak *${o.NamaCustomer}*,\n` +
+        `Berikut konfirmasi pesanan Anda di *${store.nama_toko || 'Alinea Desain'}*:\n\n` +
+        `📄 *ID Pesanan:* ${o.ID}\n` +
+        `👤 *Pelanggan:* ${o.NamaCustomer}\n` +
+        `📦 *Rincian Order:* ${o.NamaProduk} (${o.Qty}x)` +
+        (isMet ? `\n📐 *Ukuran:* ${o.Panjang} x ${o.Lebar} cm (${o.Finishing || 'Simkel'})` : '') +
+        `\n💰 *Total Biaya:* ${formatRp(o.TotalHarga)}` +
+        (dpNominal > 0 ? `\n💵 *Uang Muka (DP):* ${formatRp(dpNominal)}` : '') +
+        `\n💳 *Sisa Tagihan:* ${formatRp(sisa)}` +
+        `\n🏷️ *Status Pembayaran:* ${o.StatusBayar}` +
+        `\n🚀 *Status Pengerjaan:* ${o.StatusOrder}` +
+        (o.Catatan ? `\n📝 *Catatan:* ${o.Catatan}` : '') +
+        `\n\nTerima kasih telah mencetak di *${store.nama_toko || 'Alinea Desain'}*!`
+      );
 
       Swal.fire({
         title: `<span class="text-sm font-black text-slate-800">Detail Pesanan #${o.ID}</span>`,
@@ -985,7 +1015,24 @@
       const ord = appState.data.orders.find(o => o.ID === orderId);
       if (ord) ord.StatusOrder = status;
       saveLocal(appState.data);
-      if (isGas) google.script.run.updateOrderStatus(orderId, status, ord?.NoCustomer || '', '');
+
+      // Ambil nomor tujuan customer langsung dari data sheet users
+      let custPhone = ord?.NoCustomer || '';
+      if (appState.data.users && appState.data.users.length > 0) {
+        const targetU = appState.data.users.find(u => {
+          const uP = String(u.NoWA || '').replace(/\D/g, '');
+          const oP = String(ord?.NoCustomer || '').replace(/\D/g, '');
+          const mP = uP && oP && (uP.endsWith(oP) || oP.endsWith(uP));
+          const mC = u.KodeKhusus && ord?.KodeCustomer && u.KodeKhusus !== '-' && String(u.KodeKhusus).trim() === String(ord.KodeCustomer).trim();
+          const mN = u.Nama && ord?.NamaCustomer && u.Nama.trim().toLowerCase() === ord.NamaCustomer.trim().toLowerCase();
+          return mP || mC || mN;
+        });
+        if (targetU && targetU.NoWA) {
+          custPhone = targetU.NoWA;
+        }
+      }
+
+      if (isGas) google.script.run.updateOrderStatus(orderId, status, custPhone, '');
       showToast(`Status #${orderId} diubah ke ${status}`);
     }
 

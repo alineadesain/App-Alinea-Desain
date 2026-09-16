@@ -39,6 +39,11 @@ import {
 } from './services/gasSyncService';
 
 import {
+  findCustomerPhone,
+  formatOrderWhatsAppConfirmation
+} from './utils/whatsappFormatter';
+
+import {
   Home,
   ShoppingCart,
   Store,
@@ -169,10 +174,10 @@ export default function App() {
       id: 'item_1',
       productId: appData.products[0]?.ID || 'P1',
       qty: 1,
-      panjang: 200,
-      lebar: 100,
+      panjang: 0,
+      lebar: 0,
       finishing: 'Simkel',
-      withDesain: true,
+      withDesain: false,
       withCutting: false,
       withLaminating: false
     }
@@ -202,24 +207,34 @@ export default function App() {
     return 'Rp ' + (num || 0).toLocaleString('id-ID');
   };
 
-  // Helper calculation for individual order item
+  // Helper calculation for individual order item (synced precisely with Spreadsheet rates)
   const calculateItemTotal = (item: OrderFormItem) => {
     const prod = appData.products.find((p) => p.ID === item.productId);
     if (!prod) return 0;
 
     let basePrice = 0;
     if (prod.Kategori === 'meteran') {
-      const p = Math.max(50, item.panjang || 100);
-      const l = Math.max(50, item.lebar || 100);
-      const luasM2 = Math.max(1, (p / 100) * (l / 100));
-      basePrice = prod.Harga * luasM2 * item.qty;
+      const p = item.panjang || 0;
+      const l = item.lebar || 0;
+      if (p <= 0 || l <= 0) {
+        basePrice = 0;
+      } else {
+        const luasM2 = Math.max(1, (p / 100) * (l / 100));
+        basePrice = prod.Harga * luasM2 * item.qty;
+      }
     } else {
       basePrice = prod.Harga * item.qty;
     }
 
-    const dsn = item.withDesain ? prod.HargaDesain || 15000 : 0;
-    const cut = item.withCutting ? (prod.HargaCutting || 0) * item.qty : 0;
-    const lam = item.withLaminating ? (prod.HargaLaminating || 0) * item.qty : 0;
+    const dsn = item.withDesain
+      ? (prod.HargaDesain !== undefined && prod.HargaDesain !== null ? Number(prod.HargaDesain) : 15000)
+      : 0;
+    const cut = item.withCutting
+      ? ((prod.HargaCutting !== undefined && prod.HargaCutting !== null ? Number(prod.HargaCutting) : 0) * item.qty)
+      : 0;
+    const lam = item.withLaminating
+      ? ((prod.HargaLaminating !== undefined && prod.HargaLaminating !== null ? Number(prod.HargaLaminating) : 0) * item.qty)
+      : 0;
 
     return Math.round(basePrice + dsn + cut + lam);
   };
@@ -251,9 +266,9 @@ export default function App() {
         withDesain: item.withDesain,
         withCutting: item.withCutting,
         withLaminating: item.withLaminating,
-        jasaDesain: item.withDesain ? prod.HargaDesain || 15000 : 0,
-        jasaCutting: item.withCutting ? (prod.HargaCutting || 0) * item.qty : 0,
-        jasaLaminating: item.withLaminating ? (prod.HargaLaminating || 0) * item.qty : 0,
+        jasaDesain: item.withDesain ? (prod.HargaDesain !== undefined && prod.HargaDesain !== null ? Number(prod.HargaDesain) : 15000) : 0,
+        jasaCutting: item.withCutting ? ((prod.HargaCutting !== undefined && prod.HargaCutting !== null ? Number(prod.HargaCutting) : 0) * item.qty) : 0,
+        jasaLaminating: item.withLaminating ? ((prod.HargaLaminating !== undefined && prod.HargaLaminating !== null ? Number(prod.HargaLaminating) : 0) * item.qty) : 0,
         subtotal: calculateItemTotal(item)
       };
     });
@@ -303,6 +318,8 @@ export default function App() {
       JasaDesain: builtItems.reduce((s, it) => s + (it.jasaDesain || 0), 0),
       TotalHarga: orderGrandTotal,
       NominalDP: dpAmount > 0 ? dpAmount : undefined,
+      DP: dpAmount,
+      SisaTagihan: Math.max(0, orderGrandTotal - dpAmount),
       StatusBayar: finalBayar,
       StatusOrder: 'Order Masuk',
       Catatan: orderCatatan.trim() || undefined,
@@ -332,14 +349,14 @@ export default function App() {
     showToast(`Sukses! Pesanan ${unifiedOrder.ID} (${orderItems.length} produk) berhasil dikirim.`);
     setOrderCatatan('');
     setOrderNominalDP('');
-    // Reset to 1 item
+    // Reset to 1 item with 0 dimensions
     setOrderItems([
       {
         id: 'item_' + Date.now(),
         productId: appData.products[0]?.ID || 'P1',
         qty: 1,
-        panjang: 200,
-        lebar: 100,
+        panjang: 0,
+        lebar: 0,
         finishing: 'Simkel',
         withDesain: false,
         withCutting: false,
@@ -362,13 +379,22 @@ export default function App() {
     // Otomatis sinkronkan perubahan status ke Google Spreadsheet
     if (appData.storeData.gas_web_app_url) {
       const ord = appData.orders.find((o) => o.ID === orderId);
-      syncGasUpdateOrderStatus(
-        appData.storeData.gas_web_app_url,
-        orderId,
-        newStatus,
-        ord?.NoCustomer,
-        `Produk: ${ord?.NamaProduk || '-'} (Qty: ${ord?.Qty || 1}) - Total: ${formatRp(ord?.TotalHarga || 0)}`
-      ).catch((e) => console.warn('Sync status ke GAS:', e));
+      if (ord) {
+        // Ambil nomor tujuan customer langsung dari data sheet users
+        const customerPhone = findCustomerPhone(ord, appData.users);
+        const orderSummary = formatOrderWhatsAppConfirmation(
+          { ...ord, StatusOrder: newStatus },
+          appData.storeData
+        );
+
+        syncGasUpdateOrderStatus(
+          appData.storeData.gas_web_app_url,
+          orderId,
+          newStatus,
+          customerPhone,
+          orderSummary
+        ).catch((e) => console.warn('Sync status ke GAS:', e));
+      }
     }
 
     showToast(`Status pesanan ${orderId} diubah ke: ${newStatus}`);
@@ -694,10 +720,64 @@ export default function App() {
       const remoteData = res.data;
       setAppData((prev) => ({
         ...prev,
-        users: (remoteData.users && remoteData.users.length > 0) ? remoteData.users : prev.users,
-        products: (remoteData.products && remoteData.products.length > 0) ? remoteData.products : prev.products,
-        orders: remoteData.orders || prev.orders,
-        expenses: remoteData.expenses || prev.expenses,
+        users: (remoteData.users && remoteData.users.length > 0)
+          ? remoteData.users.map((u: any) => ({
+              ...u,
+              ID: String(u.ID || `U-${Date.now()}`),
+              Role: (u.Role === 'admin' ? 'admin' : 'customer') as 'admin' | 'customer',
+              KodeKhusus: String(u.KodeKhusus ?? '-'),
+              Nama: String(u.Nama ?? ''),
+              NoWA: String(u.NoWA ?? ''),
+              Alamat: String(u.Alamat ?? ''),
+              Password: String(u.Password ?? ''),
+              Email: u.Email ? String(u.Email) : undefined,
+              TglDaftar: u.TglDaftar ? String(u.TglDaftar) : new Date().toISOString()
+            }))
+          : prev.users,
+        products: (remoteData.products && remoteData.products.length > 0)
+          ? remoteData.products.map((p: any) => ({
+              ...p,
+              ID: String(p.ID),
+              Harga: Number(p.Harga || 0),
+              Terjual: Number(p.Terjual || 0),
+              HargaDesain: p.HargaDesain !== undefined && p.HargaDesain !== null && p.HargaDesain !== '' ? Number(p.HargaDesain) : 15000,
+              HargaCutting: p.HargaCutting !== undefined && p.HargaCutting !== null && p.HargaCutting !== '' ? Number(p.HargaCutting) : 0,
+              HargaLaminating: p.HargaLaminating !== undefined && p.HargaLaminating !== null && p.HargaLaminating !== '' ? Number(p.HargaLaminating) : 0
+            }))
+          : prev.products,
+        orders: (remoteData.orders && remoteData.orders.length > 0)
+          ? remoteData.orders.map((o: any) => {
+              const total = Number(o.TotalHarga || 0);
+              const dp = Number(o.DP !== undefined && o.DP !== null && o.DP !== '' ? o.DP : (o.NominalDP || 0));
+              const sisa = o.SisaTagihan !== undefined && o.SisaTagihan !== null && o.SisaTagihan !== '' ? Number(o.SisaTagihan) : Math.max(0, total - dp);
+              return {
+                ...o,
+                ID: String(o.ID),
+                Qty: Number(o.Qty || 1),
+                Panjang: Number(o.Panjang || 0),
+                Lebar: Number(o.Lebar || 0),
+                JasaCutting: Number(o.JasaCutting || 0),
+                JasaLaminating: Number(o.JasaLaminating || 0),
+                JasaDesain: Number(o.JasaDesain || 0),
+                TotalHarga: total,
+                DP: dp,
+                NominalDP: dp,
+                SisaTagihan: sisa,
+                StatusBayar: o.StatusBayar || (dp >= total && total > 0 ? 'Lunas' : (dp > 0 ? 'DP' : 'Belum Lunas')),
+                StatusOrder: o.StatusOrder || 'Order Masuk'
+              };
+            })
+          : prev.orders,
+        expenses: (remoteData.expenses && remoteData.expenses.length > 0)
+          ? remoteData.expenses.map((ex: any) => ({
+              ...ex,
+              ID: String(ex.ID),
+              Total: Number(ex.Total || 0),
+              Toko: String(ex.Toko || ''),
+              Detail: String(ex.Detail || ''),
+              Tgl: ex.Tgl ? String(ex.Tgl).split('T')[0] : new Date().toISOString().split('T')[0]
+            }))
+          : prev.expenses,
         storeData: {
           ...prev.storeData,
           ...(remoteData.storeData || {}),
@@ -846,7 +926,7 @@ export default function App() {
 
   // Customer orders
   const customerOrders = currentUser
-    ? appData.orders.filter((o) => o.KodeCustomer === currentUser.KodeKhusus)
+    ? appData.orders.filter((o) => String(o.KodeCustomer) === String(currentUser.KodeKhusus))
     : [];
 
   // JIKA BELUM LOGIN: Arahkan LANGSUNG ke tampilan portal login sebelum semua user masuk ke aplikasi!
@@ -923,16 +1003,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* GAS Code Helper Button */}
-            <button
-              onClick={() => setShowGasModal(true)}
-              className="bg-teal-900/70 hover:bg-teal-800 text-teal-200 hover:text-white px-2 py-1.5 rounded-xl text-[11px] font-bold border border-teal-700/60 transition flex items-center gap-1"
-              title="Lihat Kode Google Apps Script & Index.html"
-            >
-              <FileCode className="w-3.5 h-3.5 text-teal-400" />
-              <span className="hidden sm:inline">GAS</span>
-            </button>
-
             {/* Single Active Login: No Switch Allowed. Must Logout to use another account */}
             {currentUser ? (
               <button
@@ -1399,8 +1469,8 @@ export default function App() {
                             id: 'item_' + Date.now(),
                             productId: appData.products[0]?.ID || 'P1',
                             qty: 1,
-                            panjang: 200,
-                            lebar: 100,
+                            panjang: 0,
+                            lebar: 0,
                             finishing: 'Simkel',
                             withDesain: false,
                             withCutting: false,
@@ -1411,7 +1481,7 @@ export default function App() {
                       className="w-full py-2.5 rounded-xl border-2 border-dashed border-teal-300 text-teal-700 hover:bg-teal-50 text-xs font-bold transition flex items-center justify-center gap-1.5"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>Tambah Produk Lain dalam 1 Order</span>
+                      <span>Tambah Produk Lain dalam 1 Transaksi</span>
                     </button>
 
                     {/* Catatan / Keterangan Tambahan */}
@@ -2276,7 +2346,7 @@ export default function App() {
                       .filter((u) => u.Role === 'customer')
                       .map((u) => {
                         const countOrders = appData.orders.filter(
-                          (o) => o.KodeCustomer === u.KodeKhusus
+                          (o) => String(o.KodeCustomer) === String(u.KodeKhusus)
                         ).length;
                         return (
                           <div

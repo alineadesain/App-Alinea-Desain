@@ -16,18 +16,29 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-import { Order, StoreData } from '../types';
+import { Order, StoreData, User } from '../types';
+import {
+  findCustomerPhone,
+  cleanWhatsAppPhone,
+  formatOrderWhatsAppConfirmation,
+  formatCustomerToAdminWhatsAppConfirmation,
+  createWhatsAppUrl
+} from '../utils/whatsappFormatter';
 
 interface OrderDetailModalProps {
   order: Order | null;
   storeData: StoreData;
   onClose: () => void;
+  users?: User[];
+  userRole?: 'admin' | 'customer';
 }
 
 export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   order,
   storeData,
-  onClose
+  onClose,
+  users = [],
+  userRole = 'customer'
 }) => {
   const [copiedRekening, setCopiedRekening] = useState(false);
 
@@ -107,23 +118,31 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
   };
 
+  const dpAmount = order.NominalDP || order.DP || 0;
+  const sisaTagihan = order.SisaTagihan !== undefined ? order.SisaTagihan : Math.max(0, order.TotalHarga - dpAmount);
+
   const handleWhatsApp = () => {
-    const rawNo = (storeData.kontak || '081234567890').replace(/[^0-9]/g, '');
-    const phone = rawNo.startsWith('0') ? '62' + rawNo.slice(1) : rawNo;
+    if (userRole === 'admin') {
+      // Admin View: Tombol chat konfirmasi terhubung langsung ke nomor customer dari sheet Users untuk kirim nota
+      const customerRawPhone = findCustomerPhone(order, users);
+      const destPhone = cleanWhatsAppPhone(customerRawPhone);
 
-    const message = encodeURIComponent(
-      `Halo Alinea Desain, saya ingin konfirmasi pesanan saya:\n\n` +
-      `📌 *No. Order:* ${order.ID}\n` +
-      `👤 *Nama:* ${order.NamaCustomer} (ID: ${order.KodeCustomer})\n` +
-      `📦 *Produk:* ${order.NamaProduk} (${order.Qty} item)\n` +
-      (order.Kategori === 'meteran' ? `📐 *Ukuran:* ${order.Panjang} x ${order.Lebar} cm (${order.Finishing})\n` : '') +
-      `💰 *Total:* ${formatRp(order.TotalHarga)}\n` +
-      `🏷️ *Status Pembayaran:* ${order.StatusBayar}\n` +
-      `🚀 *Status Order:* ${order.StatusOrder}\n\n` +
-      `Mohon informasinya mengenai status pengerjaan atau detail cetak. Terima kasih!`
-    );
+      if (!destPhone) {
+        alert('Nomor WhatsApp customer tidak ditemukan. Pastikan data customer terdaftar di Spreadsheet Sheet Users.');
+        return;
+      }
 
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+      // Format pesan konfirmasi / nota resmi pesanan pelanggan
+      const message = formatOrderWhatsAppConfirmation(order, storeData);
+      const waUrl = createWhatsAppUrl(destPhone, message);
+      window.open(waUrl, '_blank');
+    } else {
+      // Customer View: Menghubungi CS Toko untuk konfirmasi pembayaran & pengerjaan
+      const csPhone = cleanWhatsAppPhone(storeData.kontak || '081234567890');
+      const message = formatCustomerToAdminWhatsAppConfirmation(order, storeData);
+      const waUrl = createWhatsAppUrl(csPhone, message);
+      window.open(waUrl, '_blank');
+    }
   };
 
   const isMeteran = order.Kategori === 'meteran';
@@ -427,13 +446,23 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
         {/* Footer Actions */}
         <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
-          <button
-            onClick={handleWhatsApp}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition active:scale-95"
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span>Chat CS & Konfirmasi</span>
-          </button>
+          {userRole === 'admin' ? (
+            <button
+              onClick={handleWhatsApp}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>Kirim Nota ke WhatsApp Customer</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleWhatsApp}
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>Chat CS & Konfirmasi</span>
+            </button>
+          )}
 
           <button
             onClick={() => window.print()}
