@@ -40,7 +40,8 @@ import {
 
 import {
   findCustomerPhone,
-  formatOrderWhatsAppConfirmation
+  formatOrderWhatsAppConfirmation,
+  cleanWhatsAppPhone
 } from './utils/whatsappFormatter';
 
 import {
@@ -607,18 +608,41 @@ export default function App() {
 
   // Admin New Order Handler (supports new customer creation or existing customer)
   const handleSaveAdminOrder = (order: Order, newCustomer?: User) => {
+    // Pastikan nilai SisaTagihan selalu terhitung akurat
+    const orderTotal = Number(order.TotalHarga || 0);
+    const orderDp = Number(order.DP !== undefined && order.DP !== null ? order.DP : (order.NominalDP || 0));
+    const calculatedSisa = order.SisaTagihan !== undefined && order.SisaTagihan !== null
+      ? Number(order.SisaTagihan)
+      : Math.max(0, orderTotal - orderDp);
+
+    const readyOrder: Order = {
+      ...order,
+      TotalHarga: orderTotal,
+      DP: orderDp,
+      NominalDP: orderDp,
+      SisaTagihan: calculatedSisa
+    };
+
     setAppData((prev) => {
       let updatedUsers = prev.users;
       if (newCustomer) {
-        updatedUsers = [newCustomer, ...prev.users];
+        const cleanNewPhone = cleanWhatsAppPhone(newCustomer.NoWA);
+        const exists = prev.users.some(
+          (u) =>
+            u.ID === newCustomer.ID ||
+            (u.NoWA && cleanNewPhone && cleanWhatsAppPhone(u.NoWA) === cleanNewPhone)
+        );
+        if (!exists) {
+          updatedUsers = [newCustomer, ...prev.users];
+        }
       }
       const updatedProducts = prev.products.map((p) => {
         let addedQty = 0;
-        if (order.Items && order.Items.length > 0) {
-          const match = order.Items.filter((it) => it.productId === p.ID);
+        if (readyOrder.Items && readyOrder.Items.length > 0) {
+          const match = readyOrder.Items.filter((it) => it.productId === p.ID);
           addedQty = match.reduce((s, it) => s + it.qty, 0);
-        } else if (p.ID === order.IDProduk) {
-          addedQty = order.Qty;
+        } else if (p.ID === readyOrder.IDProduk) {
+          addedQty = readyOrder.Qty;
         }
         return addedQty > 0 ? { ...p, Terjual: (p.Terjual || 0) + addedQty } : p;
       });
@@ -626,26 +650,26 @@ export default function App() {
         ...prev,
         users: updatedUsers,
         products: updatedProducts,
-        orders: [order, ...prev.orders]
+        orders: [readyOrder, ...prev.orders]
       };
     });
 
     // Otomatis sinkronkan pesanan admin & customer baru ke Google Spreadsheet
     if (appData.storeData.gas_web_app_url) {
       if (newCustomer) {
-        syncGasNewCustomer(appData.storeData.gas_web_app_url, newCustomer).catch((e) =>
-          console.warn('Sync customer baru ke GAS:', e)
-        );
+        syncGasNewCustomer(appData.storeData.gas_web_app_url, newCustomer)
+          .then((res) => console.log('Sync customer baru admin ke GAS sukses:', res))
+          .catch((e) => console.warn('Sync customer baru ke GAS error:', e));
       }
-      syncGasNewOrder(appData.storeData.gas_web_app_url, order).catch((e) =>
-        console.warn('Sync pesanan admin ke GAS:', e)
-      );
+      syncGasNewOrder(appData.storeData.gas_web_app_url, readyOrder)
+        .then((res) => console.log('Sync pesanan admin ke GAS sukses:', res))
+        .catch((e) => console.warn('Sync pesanan admin ke GAS error:', e));
     }
 
     showToast(
       newCustomer
-        ? `Customer "${newCustomer.Nama}" & Pesanan ${order.ID} tersimpan!`
-        : `Pesanan ${order.ID} untuk ${order.NamaCustomer} tersimpan!`
+        ? `Customer "${newCustomer.Nama}" & Pesanan ${readyOrder.ID} tersimpan!`
+        : `Pesanan ${readyOrder.ID} untuk ${readyOrder.NamaCustomer} tersimpan!`
     );
   };
 
@@ -749,7 +773,12 @@ export default function App() {
           ? remoteData.orders.map((o: any) => {
               const total = Number(o.TotalHarga || 0);
               const dp = Number(o.DP !== undefined && o.DP !== null && o.DP !== '' ? o.DP : (o.NominalDP || 0));
-              const sisa = o.SisaTagihan !== undefined && o.SisaTagihan !== null && o.SisaTagihan !== '' ? Number(o.SisaTagihan) : Math.max(0, total - dp);
+              const rawSisa = o['Sisa Tagihan'] !== undefined && o['Sisa Tagihan'] !== null && o['Sisa Tagihan'] !== ''
+                ? o['Sisa Tagihan']
+                : (o.SisaTagihan !== undefined && o.SisaTagihan !== null && o.SisaTagihan !== ''
+                  ? o.SisaTagihan
+                  : (o.sisaTagihan !== undefined && o.sisaTagihan !== null && o.sisaTagihan !== '' ? o.sisaTagihan : undefined));
+              const sisa = rawSisa !== undefined ? Number(rawSisa) : Math.max(0, total - dp);
               return {
                 ...o,
                 ID: String(o.ID),
@@ -847,26 +876,32 @@ export default function App() {
   };
 
   // Handle successful login or registration from LoginPortalModal
-  const handleAuthLoginSuccess = (user: User) => {
-    let isNew = false;
+  const handleAuthLoginSuccess = (user: User, isNewRegistration?: boolean) => {
+    const cleanUserPhone = cleanWhatsAppPhone(user.NoWA);
+    const existingIndex = appData.users.findIndex(
+      (u) =>
+        (u.ID && u.ID === user.ID) ||
+        (cleanUserPhone && u.NoWA && cleanWhatsAppPhone(u.NoWA) === cleanUserPhone) ||
+        (user.Email && u.Email && u.Email.toLowerCase().trim() === user.Email.toLowerCase().trim())
+    );
+
+    const isNew = isNewRegistration !== undefined ? isNewRegistration : (existingIndex === -1);
+
     setAppData((prev) => {
-      const exists = prev.users.some((u) => u.ID === user.ID || (u.Email && u.Email === user.Email));
-      if (!exists) {
-        isNew = true;
+      if (existingIndex === -1) {
         return { ...prev, users: [user, ...prev.users] };
       }
-      // Update with latest user details if needed
       return {
         ...prev,
-        users: prev.users.map((u) => (u.ID === user.ID ? { ...u, ...user } : u))
+        users: prev.users.map((u, i) => (i === existingIndex ? { ...u, ...user } : u))
       };
     });
 
     // Otomatis sinkronkan pendaftaran customer baru ke Google Spreadsheet
     if (isNew && user.Role === 'customer' && appData.storeData.gas_web_app_url) {
-      syncGasNewCustomer(appData.storeData.gas_web_app_url, user).catch((e) =>
-        console.warn('Sync customer baru ke GAS:', e)
-      );
+      syncGasNewCustomer(appData.storeData.gas_web_app_url, user)
+        .then((res) => console.log('Sync customer baru ke Sheet Users sukses:', res))
+        .catch((e) => console.warn('Sync customer baru ke GAS error:', e));
     }
     setCurrentUser(user);
     setCurrentRole(user.Role);

@@ -25,7 +25,7 @@ interface LoginPortalModalProps {
   canClose?: boolean;
   storeData: StoreData;
   existingUsers: UserType[];
-  onLoginSuccess: (user: UserType) => void;
+  onLoginSuccess: (user: UserType, isNewRegistration?: boolean) => void;
   initialRole?: 'customer' | 'admin';
 }
 
@@ -134,7 +134,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
       return;
     }
 
-    onLoginSuccess(matched);
+    onLoginSuccess(matched, false);
     if (onClose) onClose();
   };
 
@@ -168,7 +168,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
 
     if (existingUser) {
       if (existingUser.Password === regPassword && existingUser.Role === 'customer') {
-        onLoginSuccess(existingUser);
+        onLoginSuccess(existingUser, false);
         if (onClose) onClose();
         return;
       }
@@ -192,7 +192,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
       Avatar: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80`
     };
 
-    onLoginSuccess(newUser);
+    onLoginSuccess(newUser, true);
     if (onClose) onClose();
   };
 
@@ -241,7 +241,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
           TglDaftar: '2025-01-01T08:00:00.000Z',
           Email: 'alineadesain@gmail.com'
         };
-        onLoginSuccess(defaultAdmin);
+        onLoginSuccess(defaultAdmin, false);
         if (onClose) onClose();
         return;
       }
@@ -260,7 +260,7 @@ export const LoginPortalModal: React.FC<LoginPortalModalProps> = ({
       return;
     }
 
-    onLoginSuccess(matched);
+    onLoginSuccess(matched, false);
     if (onClose) onClose();
   };
 

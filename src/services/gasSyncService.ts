@@ -159,7 +159,31 @@ export async function pushAllDatabaseToGas(
  * Helper sync instan per tindakan (Pesanan Baru, Status, dsb)
  */
 export async function syncGasNewOrder(gasUrl: string | undefined, order: any): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'addOrder', { order });
+  const total = Number(order.TotalHarga || order.totalHarga || 0);
+  const dp = Number(order.DP !== undefined && order.DP !== null ? order.DP : (order.NominalDP || 0));
+  const sisa = order.SisaTagihan !== undefined && order.SisaTagihan !== null
+    ? Number(order.SisaTagihan)
+    : Math.max(0, total - dp);
+
+  const enrichedOrder = {
+    ...order,
+    TotalHarga: total,
+    totalHarga: total,
+    DP: dp,
+    dp: dp,
+    NominalDP: dp,
+    SisaTagihan: sisa,
+    'Sisa Tagihan': sisa,
+    sisaTagihan: sisa,
+    KodeCustomer: order.KodeCustomer || order.kodeCustomer || '-',
+    NamaCustomer: order.NamaCustomer || order.namaCustomer || 'Customer',
+    NoCustomer: order.NoCustomer || order.noCustomer || order.NoWA || ''
+  };
+
+  return sendGasAction(gasUrl, 'addOrder', {
+    order: enrichedOrder,
+    ...enrichedOrder
+  });
 }
 
 export async function syncGasUpdateOrderStatus(
@@ -190,7 +214,44 @@ export async function syncGasDeleteOrder(gasUrl: string | undefined, orderId: st
 }
 
 export async function syncGasNewCustomer(gasUrl: string | undefined, user: any): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'registerCustomer', { user });
+  const nama = user.Nama || user.nama || 'Customer';
+  const noWA = user.NoWA || user.noWA || user.nowa || '';
+  const kode = user.KodeKhusus || user.kode || user.kodeKhusus || '-';
+  const id = user.ID || user.id || ('C' + Date.now());
+  const alamat = user.Alamat || user.alamat || 'Yogyakarta';
+  const password = user.Password || user.password || 'cust123';
+  const role = user.Role || user.role || 'customer';
+  const email = user.Email || user.email || (nama ? (String(nama).toLowerCase().replace(/[^a-z0-9]/g, '') + '@gmail.com') : '');
+  const tglDaftar = user.TglDaftar || user.tglDaftar || new Date().toISOString();
+
+  const normalizedUser = {
+    ID: id,
+    Role: role,
+    KodeKhusus: kode,
+    Nama: nama,
+    NoWA: noWA,
+    Alamat: alamat,
+    Password: password,
+    Email: email,
+    TglDaftar: tglDaftar,
+    // Lowercase aliases for any backend script variant
+    id,
+    role,
+    kode,
+    kodeKhusus: kode,
+    nama,
+    noWA,
+    nowa: noWA,
+    alamat,
+    password,
+    email,
+    tglDaftar
+  };
+
+  return sendGasAction(gasUrl, 'registerCustomer', {
+    user: normalizedUser,
+    ...normalizedUser
+  });
 }
 
 export async function syncGasProduct(gasUrl: string | undefined, product: any): Promise<GasResponse> {
