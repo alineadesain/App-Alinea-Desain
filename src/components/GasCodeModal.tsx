@@ -15,11 +15,32 @@ export const GasCodeModal: React.FC<GasCodeModalProps> = ({ isOpen, onClose }) =
 
   const codeGsContent = `// =================================================================
 // ALINEA DESAIN - GOOGLE APPS SCRIPT (Code.gs)
-// Versi 5.0: Sinkronisasi Penuh Database, Orders, Expenses & Toko
+// Versi 5.1: Sinkronisasi Database via SPREADSHEET_ID / Active
 // =================================================================
 
-const WA_API_KEY = "MASUKKAN_API_KEY_ANDA_DISINI"; 
-const WA_URL = "https://api.fonnte.com/send"; 
+const CONFIG = {
+  // Masukkan SPREADSHEET_ID jika menggunakan Apps Script standalone
+  // (ID ada di URL: docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit)
+  // Kosongkan ("") jika script dibuat langsung di dalam spreadsheet
+  SPREADSHEET_ID: "", 
+
+  WA_API_KEY: "MASUKKAN_API_KEY_ANDA_DISINI", 
+  WA_URL: "https://api.fonnte.com/send"
+};
+
+const WA_API_KEY = CONFIG.WA_API_KEY; 
+const WA_URL = CONFIG.WA_URL; 
+
+function getSpreadsheet() {
+  if (CONFIG.SPREADSHEET_ID && typeof CONFIG.SPREADSHEET_ID === 'string' && CONFIG.SPREADSHEET_ID.trim() !== "" && CONFIG.SPREADSHEET_ID !== "MASUKKAN_SPREADSHEET_ID_DISINI") {
+    try {
+      return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID.trim());
+    } catch (err) {
+      Logger.log("Peringatan: Gagal membuka Spreadsheet ID: " + err.message + ". Menggunakan active spreadsheet.");
+    }
+  }
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
 
 function doGet(e) {
   if (e && e.parameter && e.parameter.action) {
@@ -83,7 +104,7 @@ function doPost(e) {
 }
 
 function setupDatabase() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   const sheets = {
     'Users': ['ID', 'Role', 'KodeKhusus', 'Nama', 'NoWA', 'Alamat', 'Password', 'Email', 'TglDaftar'],
     'Products': ['ID', 'Nama', 'Kategori', 'Harga', 'Deskripsi', 'Thumbnail', 'Terjual', 'HargaDesain', 'HargaCutting', 'HargaLaminating'],
@@ -125,7 +146,7 @@ function setupDatabase() {
 
 function registerCustomer(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
     let sheet = ss.getSheetByName('Users');
     if (!sheet) {
       setupDatabase();
@@ -173,7 +194,7 @@ function registerCustomer(data) {
 }
 
 function getSheetData(sheetName) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return [];
   const data = sheet.getDataRange().getValues();
@@ -189,7 +210,7 @@ function getSheetData(sheetName) {
 
 function fetchAllData() {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
     if (!ss.getSheetByName('Users') || !ss.getSheetByName('Orders')) {
       setupDatabase();
     }
@@ -208,7 +229,7 @@ function fetchAllData() {
 
 function addOrder(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
     let sheet = ss.getSheetByName('Orders');
     if (!sheet) {
       setupDatabase();
@@ -343,7 +364,7 @@ function addOrder(data) {
 
 function updateOrderStatus(orderId, status, noCustomer, orderDetailText) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Orders');
+    const sheet = getSpreadsheet().getSheetByName('Orders');
     if (!sheet) return { success: false };
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
@@ -360,7 +381,7 @@ function updateOrderStatus(orderId, status, noCustomer, orderDetailText) {
 
 function updateOrderBayar(orderId, statusBayar) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Orders');
+    const sheet = getSpreadsheet().getSheetByName('Orders');
     if (!sheet) return { success: false };
     const data = sheet.getDataRange().getValues();
     if (data.length < 2) return { success: false };
@@ -390,7 +411,7 @@ function updateOrderBayar(orderId, statusBayar) {
 }
 
 function addProduct(data) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Products');
+  const sheet = getSpreadsheet().getSheetByName('Products');
   const id = data.ID || ('P' + new Date().getTime());
   sheet.appendRow([
     id, data.Nama || 'Produk', data.Kategori || 'satuan', Number(data.Harga) || 0,
@@ -401,7 +422,7 @@ function addProduct(data) {
 }
 
 function deleteProduct(id) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Products');
+  const sheet = getSpreadsheet().getSheetByName('Products');
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
@@ -413,14 +434,14 @@ function deleteProduct(id) {
 }
 
 function addExpense(data) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Expenses');
+  const sheet = getSpreadsheet().getSheetByName('Expenses');
   const id = data.ID || ('EXP' + new Date().getTime());
   sheet.appendRow([id, data.Tgl || new Date().toISOString().split('T')[0], Number(data.Total) || 0, data.Toko || '', data.Detail || '', '']);
   return { success: true, id: id };
 }
 
 function deleteExpense(id) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Expenses');
+  const sheet = getSpreadsheet().getSheetByName('Expenses');
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
@@ -432,7 +453,7 @@ function deleteExpense(id) {
 }
 
 function saveAllStoreData(storeObj) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('StoreData');
+  const sheet = getSpreadsheet().getSheetByName('StoreData');
   if (!sheet) return { success: false };
   for (let k in storeObj) {
     const val = typeof storeObj[k] === 'object' ? JSON.stringify(storeObj[k]) : String(storeObj[k]);
@@ -443,7 +464,7 @@ function saveAllStoreData(storeObj) {
 
 function syncFullDatabase(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
     setupDatabase();
 
     if (data.orders && Array.isArray(data.orders)) {
@@ -694,6 +715,22 @@ function syncFullDatabase(data) {
                   <li>Klik <strong>Deploy</strong>, lalu salin URL Web App yang berakhiran <code className="font-mono font-bold">/exec</code>.</li>
                   <li>Buka Akun Admin &gt; Menu <strong>Toko</strong> &gt; Tempel URL ke kolom <strong>Web App URL</strong> &gt; Klik <strong>Sync Now</strong>.</li>
                 </ol>
+              </div>
+
+              {/* Bagian Opsional: SPREADSHEET_ID */}
+              <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl space-y-2">
+                <div className="font-bold text-sky-950 flex items-center gap-1.5 text-xs">
+                  <span className="text-sm">📊</span>
+                  <span>Sinkronisasi Presisi via SPREADSHEET_ID:</span>
+                </div>
+                <p className="text-slate-700 leading-relaxed">
+                  Jika Anda menggunakan Google Apps Script terpisah (standalone) atau ingin memastikan data selalu masuk ke spreadsheet tertentu:
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-slate-700">
+                  <li>Salin ID Spreadsheet dari URL browser Anda: <code className="font-mono bg-white px-1 py-0.5 rounded border border-sky-200">https://docs.google.com/spreadsheets/d/<strong>[SPREADSHEET_ID]</strong>/edit</code></li>
+                  <li>Buka <code className="font-bold font-mono">Code.gs</code> di Apps Script, isi bagian atas: <code className="font-mono bg-white px-1 py-0.5 rounded font-bold text-sky-800">SPREADSHEET_ID: "ID_SPREADSHEET_ANDA"</code></li>
+                  <li>Jika script dibuat langsung melalui menu <em>Ekstensi &gt; Apps Script</em> pada Google Sheet Anda, kolom ini boleh dibiarkan kosong (<code className="font-mono">""</code>) karena sistem otomatis menggunakan spreadsheet yang sedang aktif.</li>
+                </ul>
               </div>
 
               {/* Bagian 2: WhatsApp API */}

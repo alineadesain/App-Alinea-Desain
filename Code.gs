@@ -1,12 +1,37 @@
 // =================================================================
 // ALINEA DESAIN - GOOGLE APPS SCRIPT (Code.gs)
-// Versi 5.0: Sinkronisasi Penuh Database, Orders, Expenses & Toko
+// Versi 5.1: Sinkronisasi Database via SPREADSHEET_ID atau Active Sheet
 // =================================================================
 
-// Konfigurasi API WhatsApp (Fonnte / Fonte / Flowkirim / dsb)
-// Biarkan kosong atau default jika belum menggunakan gateway WhatsApp
-const WA_API_KEY = "MASUKKAN_API_KEY_ANDA_DISINI"; 
-const WA_URL = "https://api.fonnte.com/send"; 
+// Konfigurasi Utama Sistem
+const CONFIG = {
+  // Masukkan SPREADSHEET_ID Google Sheets Anda di sini
+  // Didapat dari URL: https://docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit
+  // Contoh: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+  // Jika script dibuat langsung di dalam spreadsheet (Extensions > Apps Script),
+  // Anda dapat mengisinya atau mengosongkannya ("") untuk otomatis memakai Active Spreadsheet.
+  SPREADSHEET_ID: "1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc",
+
+  // Konfigurasi Gateway WhatsApp (Fonnte, Fonte, Flowkirim, dll)
+  WA_API_KEY: "9JPQEQhViYsp7Q6njJQv", 
+  WA_URL: "https://api.fonnte.com/send"
+};
+
+// Kompatibilitas konstanta
+const WA_API_KEY = CONFIG.WA_API_KEY; 
+const WA_URL = CONFIG.WA_URL; 
+
+// Helper sentral untuk menghubungkan ke Google Spreadsheet via SPREADSHEET_ID atau Active
+function getSpreadsheet() {
+  if (CONFIG.SPREADSHEET_ID && typeof CONFIG.SPREADSHEET_ID === 'string' && CONFIG.SPREADSHEET_ID.trim() !== "" && CONFIG.SPREADSHEET_ID !== "MASUKKAN_SPREADSHEET_ID_DISINI") {
+    try {
+      return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID.trim());
+    } catch (err) {
+      Logger.log("Peringatan: Gagal membuka Spreadsheet ID ('" + CONFIG.SPREADSHEET_ID + "'): " + err.message + ". Menggunakan active spreadsheet.");
+    }
+  }
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
 
 function doGet(e) {
   // Dukungan Endpoint API JSON untuk Sync Now dari Aplikasi Web Eksternal
@@ -89,7 +114,7 @@ function doPost(e) {
 
 // Setup pertama kali database spreadsheet (Jalankan sekali dari menu Run di Apps Script)
 function setupDatabase() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   const sheets = {
     'Users': ['ID', 'Role', 'KodeKhusus', 'Nama', 'NoWA', 'Alamat', 'Password', 'Email', 'TglDaftar'],
     'Products': ['ID', 'Nama', 'Kategori', 'Harga', 'Deskripsi', 'Thumbnail', 'Terjual', 'HargaDesain', 'HargaCutting', 'HargaLaminating'],
@@ -136,8 +161,8 @@ function setupDatabase() {
       'admin', 
       '-', 
       'Admin Alinea', 
-      '081234567890', 
-      'Yogyakarta', 
+      '085815950700', 
+      'Klaten', 
       'admin123', 
       'admin@alineadesain.com', 
       new Date().toISOString()
@@ -177,13 +202,13 @@ function setupDatabase() {
   let storeSheet = ss.getSheetByName('StoreData');
   if (storeSheet.getLastRow() === 1) {
     storeSheet.appendRow(['nama_toko', 'Alinea Desain']);
-    storeSheet.appendRow(['tagline', 'Percetakan & Digital Printing Cepat Berkualitas']);
+    storeSheet.appendRow(['tagline', 'Solusi Desain & Cetak Anda']);
     storeSheet.appendRow(['logo_url', '']);
     storeSheet.appendRow(['running_text', 'Selamat datang di Alinea Desain! Dapatkan promo cetak kilat MMT & stiker presisi, konsultasi desain ramah, dan diskon instansi/kampus.']);
     storeSheet.appendRow(['running_text_speed', '22']);
-    storeSheet.appendRow(['alamat', 'Jl. Prof. Dr. Sardjito No. 45, Terban, Gondokusuman, Yogyakarta']);
-    storeSheet.appendRow(['kontak', '081234567890']);
-    storeSheet.appendRow(['rekening', 'BCA 1234567890 a.n ALINEA DESAIN CREATIVE']);
+    storeSheet.appendRow(['alamat', 'Jl K.A Perwito Teluk, RT.01/RW.03, Ngreden, Kec. Wonosari, Kabupaten Klaten, Jawa Tengah 57473']);
+    storeSheet.appendRow(['kontak', '085815950700']);
+    storeSheet.appendRow(['rekening', 'CIMB Niaga 763568966600 a.n Muhammad Rosyid Ridlo']);
     storeSheet.appendRow(['clients_slider', JSON.stringify([
       {"id":"c1","nama":"Universitas Gadjah Mada","logo":"https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=160&auto=format&fit=crop&q=80","keterangan":"Cetak Buku Panduan, Banner Seminar & Sertifikat KKN","kategori":"Pendidikan"},
       {"id":"c2","nama":"Universitas Diponegoro","logo":"https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=160&auto=format&fit=crop&q=80","keterangan":"Backdrop Wisuda & Souvenir Dies Natalis","kategori":"Pendidikan"},
@@ -195,7 +220,7 @@ function setupDatabase() {
 
 // Helper membaca data tabel dari Sheet
 function getSheetData(sheetName) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return [];
   const data = sheet.getDataRange().getValues();
@@ -217,7 +242,7 @@ function generateRandomCode() {
 // Mengambil seluruh data dari Google Spreadsheet
 function fetchAllData() {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
     if (!ss.getSheetByName('Users') || !ss.getSheetByName('Orders')) {
       setupDatabase();
     }
@@ -261,7 +286,7 @@ function loginUser(identifier, password, role) {
 // Pendaftaran Akun Customer Baru
 function registerCustomer(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
     let sheet = ss.getSheetByName('Users');
     if (!sheet) {
       setupDatabase();
@@ -346,7 +371,7 @@ function registerCustomer(data) {
 // Input Order Baru (Customer & Admin Kasir)
 function addOrder(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
     let sheet = ss.getSheetByName('Orders');
     if (!sheet) {
       setupDatabase();
@@ -520,7 +545,7 @@ function addOrder(data) {
 // Update Status Order (Order Masuk, Proses, Siap Diambil, Selesai, Dibatalkan)
 function updateOrderStatus(orderId, status, noCustomer, orderDetailText) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Orders');
+    const sheet = getSpreadsheet().getSheetByName('Orders');
     if (!sheet) return { success: false, message: 'Sheet Orders tidak ditemukan' };
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
@@ -541,7 +566,7 @@ function updateOrderStatus(orderId, status, noCustomer, orderDetailText) {
 // Update Status Bayar (Belum Lunas, DP Terbayar, Lunas)
 function updateOrderBayar(orderId, statusBayar) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Orders');
+    const sheet = getSpreadsheet().getSheetByName('Orders');
     if (!sheet) return { success: false };
     const data = sheet.getDataRange().getValues();
     if (data.length < 2) return { success: false };
@@ -574,7 +599,7 @@ function updateOrderBayar(orderId, statusBayar) {
 // Hapus Pesanan
 function deleteOrder(orderId) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Orders');
+    const sheet = getSpreadsheet().getSheetByName('Orders');
     if (!sheet) return { success: false };
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
@@ -592,7 +617,7 @@ function deleteOrder(orderId) {
 // Sinkronisasi Seluruh Database (Orders, Products, Users, Expenses, StoreData)
 function syncFullDatabase(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
     setupDatabase();
 
     // 1. Simpan Orders
@@ -753,7 +778,7 @@ function syncFullDatabase(data) {
 // Tambah Produk Baru
 function addProduct(data) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Products');
+    const sheet = getSpreadsheet().getSheetByName('Products');
     if (!sheet) return { success: false };
     const id = data.ID || ('P' + new Date().getTime());
     sheet.appendRow([
@@ -777,7 +802,7 @@ function addProduct(data) {
 // Hapus Produk
 function deleteProduct(id) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Products');
+    const sheet = getSpreadsheet().getSheetByName('Products');
     if (!sheet) return { success: false };
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
@@ -795,7 +820,7 @@ function deleteProduct(id) {
 // Catat Pengeluaran Baru (Kas Toko)
 function addExpense(data) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSpreadsheet();
     let sheet = ss.getSheetByName('Expenses');
     if (!sheet) {
       setupDatabase();
@@ -818,7 +843,7 @@ function addExpense(data) {
 // Hapus Pengeluaran
 function deleteExpense(id) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Expenses');
+    const sheet = getSpreadsheet().getSheetByName('Expenses');
     if (!sheet) return { success: false };
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
@@ -836,7 +861,7 @@ function deleteExpense(id) {
 // Update Profil Customer
 function updateCustomerProfile(data) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Users');
+    const sheet = getSpreadsheet().getSheetByName('Users');
     if (!sheet) return { success: false };
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
@@ -857,7 +882,7 @@ function updateCustomerProfile(data) {
 // Update Password / Profil Admin
 function updateAdminProfile(data) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Users');
+    const sheet = getSpreadsheet().getSheetByName('Users');
     if (!sheet) return { success: false };
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
@@ -876,7 +901,7 @@ function updateAdminProfile(data) {
 // Simpan Pengaturan Toko & Logo (Key-Value)
 function updateStoreData(key, value) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('StoreData');
+    const sheet = getSpreadsheet().getSheetByName('StoreData');
     if (!sheet) return { success: false };
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
@@ -916,7 +941,7 @@ function getWhatsAppConfig() {
   };
 
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('StoreData');
+    const sheet = getSpreadsheet().getSheetByName('StoreData');
     if (!sheet) return defaults;
     const data = sheet.getDataRange().getValues();
     data.forEach(row => {
