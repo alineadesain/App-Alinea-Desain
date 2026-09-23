@@ -36,8 +36,14 @@ import {
   syncGasProduct,
   syncGasDeleteProduct,
   syncGasExpense,
-  syncGasDeleteExpense
+  syncGasDeleteExpense,
+  fetchServerState,
+  saveServerState
 } from './services/gasSyncService';
+import {
+  sendOrderCreatedNotification,
+  sendOrderStatusChangedNotification
+} from './services/whatsappService';
 
 import {
   findCustomerPhone,
@@ -186,9 +192,63 @@ export default function App() {
   ]);
   const [orderCatatan, setOrderCatatan] = useState('');
 
-  // Sync to localStorage whenever appData updates
+  // Load initial data from server on startup (agar perangkat baru langsung memiliki data & url terbaru)
+  useEffect(() => {
+    let isMounted = true;
+    const initServerData = async () => {
+      try {
+        const res = await fetchServerState();
+        if (isMounted && res.success && res.data) {
+          const s = res.data;
+          setAppData((prev) => {
+            const mergedStore = {
+              ...prev.storeData,
+              ...(s.storeData || {})
+            };
+            return {
+              users: (s.users && s.users.length > 0) ? s.users : prev.users,
+              products: (s.products && s.products.length > 0) ? s.products : prev.products,
+              orders: (s.orders && s.orders.length > 0) ? s.orders : prev.orders,
+              expenses: (s.expenses && s.expenses.length > 0) ? s.expenses : prev.expenses,
+              storeData: mergedStore
+            };
+          });
+
+          const effectiveGas = s.storeData?.gas_web_app_url;
+          if (effectiveGas && effectiveGas.startsWith('http')) {
+            fetchAllDataFromGas(effectiveGas).then((gasRes) => {
+              if (isMounted && gasRes.success && gasRes.data) {
+                const remote = gasRes.data;
+                setAppData((prev) => ({
+                  users: (remote.users && remote.users.length > 0) ? remote.users : prev.users,
+                  products: (remote.products && remote.products.length > 0) ? remote.products : prev.products,
+                  orders: (remote.orders && remote.orders.length > 0) ? remote.orders : prev.orders,
+                  expenses: (remote.expenses && remote.expenses.length > 0) ? remote.expenses : prev.expenses,
+                  storeData: {
+                    ...prev.storeData,
+                    ...(remote.storeData || {}),
+                    gas_web_app_url: effectiveGas,
+                    last_synced_at: new Date().toISOString()
+                  }
+                }));
+              }
+            }).catch((err) => console.warn('Auto sync Google Sheets on init error:', err));
+          }
+        }
+      } catch (e) {
+        console.warn('Initial server sync error:', e);
+      }
+    };
+    initServerData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Sync to localStorage & server state whenever appData updates
   useEffect(() => {
     saveStoredData(appData);
+    saveServerState(appData);
   }, [appData]);
 
   // Sync admin form defaults when currentUser changes
@@ -352,6 +412,13 @@ export default function App() {
       );
     }
 
+    // Otomatis kirim notifikasi WhatsApp ke Customer jika diaktifkan
+    if (appData.storeData.wa_auto_order !== false) {
+      sendOrderCreatedNotification(unifiedOrder, currentUser, appData.storeData)
+        .then((waRes) => console.log('WA order baru customer result:', waRes))
+        .catch((e) => console.warn('WA order baru customer error:', e));
+    }
+
     showToast(`Sukses! Pesanan ${unifiedOrder.ID} (${orderItems.length} produk) berhasil dikirim.`);
     setOrderCatatan('');
     setOrderNominalDP('');
@@ -400,6 +467,22 @@ export default function App() {
           customerPhone,
           orderSummary
         ).catch((e) => console.warn('Sync status ke GAS:', e));
+      }
+    }
+
+    // Otomatis kirim notifikasi WhatsApp perubahan status ke customer jika aktif
+    if (appData.storeData.wa_auto_status !== false) {
+      const ord = appData.orders.find((o) => o.ID === orderId);
+      if (ord) {
+        const cust = appData.users.find(
+          (u) =>
+            u.KodeKhusus === ord.KodeCustomer ||
+            u.Nama.toLowerCase() === ord.NamaCustomer.toLowerCase() ||
+            (u.NoWA && ord.NoCustomer && u.NoWA.replace(/[^0-9]/g, '') === ord.NoCustomer.replace(/[^0-9]/g, ''))
+        );
+        sendOrderStatusChangedNotification(ord, cust, newStatus, appData.storeData)
+          .then((res) => console.log('WA update status result:', res))
+          .catch((e) => console.warn('WA update status error:', e));
       }
     }
 
@@ -671,6 +754,19 @@ export default function App() {
         .catch((e) => console.warn('Sync pesanan admin ke GAS error:', e));
     }
 
+    // Otomatis kirim notifikasi WhatsApp ke Customer jika diaktifkan
+    if (appData.storeData.wa_auto_order !== false) {
+      const targetCustomer = newCustomer || appData.users.find(
+        (u) =>
+          u.KodeKhusus === readyOrder.KodeCustomer ||
+          u.Nama.toLowerCase() === readyOrder.NamaCustomer.toLowerCase() ||
+          (u.NoWA && readyOrder.NoCustomer && u.NoWA.replace(/[^0-9]/g, '') === readyOrder.NoCustomer.replace(/[^0-9]/g, ''))
+      );
+      sendOrderCreatedNotification(readyOrder, targetCustomer, appData.storeData)
+        .then((waRes) => console.log('WA order baru admin result:', waRes))
+        .catch((e) => console.warn('WA order baru admin error:', e));
+    }
+
     showToast(
       newCustomer
         ? `Customer "${newCustomer.Nama}" & Pesanan ${readyOrder.ID} tersimpan!`
@@ -692,13 +788,18 @@ export default function App() {
 
   // Update partial store data (GAS Web App URL, Sync timestamp, WA configs)
   const handleUpdateStoreDataPartial = (partial: Partial<StoreData>) => {
-    setAppData((prev) => ({
-      ...prev,
-      storeData: {
+    setAppData((prev) => {
+      const updatedStore = {
         ...prev.storeData,
         ...partial
-      }
-    }));
+      };
+      const nextState = {
+        ...prev,
+        storeData: updatedStore
+      };
+      saveServerState(nextState);
+      return nextState;
+    });
   };
 
   // Trigger Sync Now for Google Apps Script Web App URL (Tarik Data dari Spreadsheet)

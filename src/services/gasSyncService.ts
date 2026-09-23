@@ -1,7 +1,8 @@
 /**
- * Service untuk Sinkronisasi Real-Time dengan Google Apps Script Web App
+ * Service untuk Sinkronisasi Real-Time dengan Google Apps Script Web App & Server
  * Memungkinkan seluruh data (Pesanan, Produk, Customer, Pengeluaran, Toko)
- * tersimpan langsung ke Google Spreadsheet tanpa terkendala CORS browser.
+ * tersimpan langsung ke Google Spreadsheet tanpa terkendala CORS browser
+ * dan otomatis tersinkronisasi saat aplikasi dibuka di perangkat baru.
  */
 
 import { getActiveGasUrl, isRunningInAppsScript } from '../config/gasConfig';
@@ -14,17 +15,57 @@ export interface GasResponse<T = any> {
 }
 
 /**
- * Mengirim perubahan data ke Google Apps Script Web App (POST text/plain sederhana)
- * Menggunakan mode text/plain untuk melewati batasan CORS preflight OPTIONS di browser.
- * Dilengkapi fallback mode 'no-cors' agar data tetap terkirim ke Spreadsheet jika
- * terjadi redirect lintas domain dari script.google.com.
+ * Mengambil state data toko dari server penyimpanan (agar perangkat baru langsung tersinkron)
+ */
+export async function fetchServerState(): Promise<GasResponse> {
+  try {
+    const res = await fetch('/api/server-data');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.exists && json.data) {
+        return {
+          success: true,
+          message: 'Data berhasil disinkronkan dari server toko',
+          data: json.data
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Gagal membaca data server lokal:', err);
+  }
+  return { success: false, message: 'Server data belum tersedia' };
+}
+
+/**
+ * Menyimpan pembaruan state data toko ke server penyimpanan (agar perangkat lain otomatis terupdate)
+ */
+export async function saveServerState(payload: any): Promise<GasResponse> {
+  try {
+    const res = await fetch('/api/server-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return { success: true, message: json.message || 'Tersimpan di server' };
+    }
+  } catch (err: any) {
+    console.warn('Gagal menyimpan ke server lokal:', err);
+  }
+  return { success: false, message: 'Gagal koneksi ke server' };
+}
+
+/**
+ * Mengirim perubahan data ke Google Apps Script Web App
+ * Memanfaatkan server proxy /api/gas-proxy untuk mengatasi blokir CORS di semua perangkat/browser.
  */
 export async function sendGasAction(
   gasUrl: string | undefined,
   action: string,
   payload: Record<string, any> = {}
 ): Promise<GasResponse> {
-  // Dukungan langsung jika dijalankan di Google Apps Script (google.script.run)
+  // 1. Dukungan langsung jika dijalankan di Google Apps Script runtime (google.script.run)
   if (isRunningInAppsScript()) {
     try {
       const gRun = (window as any).google.script.run;
@@ -43,13 +84,38 @@ export async function sendGasAction(
   }
 
   const cleanUrl = effectiveUrl.trim();
+
+  // 2. Coba kirim via server backend /api/gas-proxy (Bebas CORS & kompatibel di seluruh perangkat)
+  try {
+    const proxyRes = await fetch('/api/gas-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: cleanUrl,
+        action,
+        payload
+      })
+    });
+
+    if (proxyRes.ok) {
+      const proxyJson = await proxyRes.json();
+      return {
+        success: proxyJson.success !== false,
+        message: proxyJson.message || 'Data berhasil dikirim ke Google Sheets (via proxy)',
+        data: proxyJson
+      };
+    }
+  } catch (proxyErr) {
+    console.warn('Proxy server GAS tidak tersedia, mencoba direct fetch...', proxyErr);
+  }
+
+  // 3. Fallback direct browser fetch text/plain
   const requestBody = JSON.stringify({
     action,
     ...payload,
     timestamp: new Date().toISOString()
   });
 
-  // Percobaan 1: Menggunakan Fetch standar text/plain (CORS standard simple request)
   try {
     const res = await fetch(cleanUrl, {
       method: 'POST',
@@ -75,12 +141,10 @@ export async function sendGasAction(
       }
     }
   } catch (err: any) {
-    console.warn('Fetch GAS standar mengembalikan kendala jaringan, mencoba fallback mode no-cors...', err);
+    console.warn('Fetch GAS standar mengembalikan kendala jaringan, mencoba mode no-cors...', err);
   }
 
-  // Percobaan 2: Fallback dengan mode 'no-cors'
-  // Mode no-cors menjamin browser mengirimkan data POST ke server Google Apps Script
-  // meskipun browser tidak mengizinkan pembacaan response lintas origin.
+  // 4. Fallback dengan mode 'no-cors'
   try {
     await fetch(cleanUrl, {
       method: 'POST',
@@ -107,14 +171,40 @@ export async function sendGasAction(
 
 /**
  * Mengambil seluruh data dari Google Spreadsheet (GET)
+ * Menggunakan server proxy /api/gas-fetch untuk melewati kendala CORS pada browser/perangkat baru.
  */
 export async function fetchAllDataFromGas(gasUrl?: string): Promise<GasResponse> {
   const effectiveUrl = getActiveGasUrl(gasUrl);
   if (!effectiveUrl) {
-    return { success: false, message: 'URL Web App belum terkonfigurasi' };
+    return { success: false, message: 'URL Web App belum terkonfigurasi. Buka pengaturan untuk menyetel URL.' };
   }
 
   const cleanUrl = effectiveUrl.trim();
+
+  // 1. Coba melalui backend /api/gas-fetch (bebas kendala CORS di semua browser & perangkat)
+  try {
+    const proxyRes = await fetch(`/api/gas-fetch?url=${encodeURIComponent(cleanUrl)}`);
+    if (proxyRes.ok) {
+      const data = await proxyRes.json();
+      if (data && (data.users || data.products || data.orders || data.success)) {
+        return {
+          success: true,
+          message: 'Data berhasil ditarik dari Google Spreadsheet!',
+          data
+        };
+      }
+      if (data.success === false) {
+        return {
+          success: false,
+          message: data.message || 'Gagal memproses data dari Google Spreadsheet'
+        };
+      }
+    }
+  } catch (proxyErr) {
+    console.warn('Proxy fetch GAS gagal, mencoba fetch langsung...', proxyErr);
+  }
+
+  // 2. Direct fetch fallback
   const fetchUrl = cleanUrl.includes('?')
     ? `${cleanUrl}&action=fetchAllData&_t=${Date.now()}`
     : `${cleanUrl}?action=fetchAllData&_t=${Date.now()}`;
@@ -153,7 +243,7 @@ export async function fetchAllDataFromGas(gasUrl?: string): Promise<GasResponse>
  * langsung ke Google Spreadsheet sekaligus
  */
 export async function pushAllDatabaseToGas(
-  gasUrl: string,
+  gasUrl: string | undefined,
   fullData: {
     users: any[];
     products: any[];
@@ -162,47 +252,24 @@ export async function pushAllDatabaseToGas(
     storeData: any;
   }
 ): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'syncFullDatabase', {
-    database: fullData,
-    users: fullData.users,
-    products: fullData.products,
-    orders: fullData.orders,
-    expenses: fullData.expenses,
-    storeData: fullData.storeData
-  });
+  const effectiveUrl = getActiveGasUrl(gasUrl);
+  if (!effectiveUrl) {
+    return { success: false, message: 'URL Web App belum terkonfigurasi' };
+  }
+
+  return sendGasAction(effectiveUrl, 'pushAllDatabase', { fullData });
 }
 
 /**
- * Helper sync instan per tindakan (Pesanan Baru, Status, dsb)
+ * Sinkronisasi Pesanan Baru ke Google Spreadsheet
  */
 export async function syncGasNewOrder(gasUrl: string | undefined, order: any): Promise<GasResponse> {
-  const total = Number(order.TotalHarga || order.totalHarga || 0);
-  const dp = Number(order.DP !== undefined && order.DP !== null ? order.DP : (order.NominalDP || 0));
-  const sisa = order.SisaTagihan !== undefined && order.SisaTagihan !== null
-    ? Number(order.SisaTagihan)
-    : Math.max(0, total - dp);
-
-  const enrichedOrder = {
-    ...order,
-    TotalHarga: total,
-    totalHarga: total,
-    DP: dp,
-    dp: dp,
-    NominalDP: dp,
-    SisaTagihan: sisa,
-    'Sisa Tagihan': sisa,
-    sisaTagihan: sisa,
-    KodeCustomer: order.KodeCustomer || order.kodeCustomer || '-',
-    NamaCustomer: order.NamaCustomer || order.namaCustomer || 'Customer',
-    NoCustomer: order.NoCustomer || order.noCustomer || order.NoWA || ''
-  };
-
-  return sendGasAction(gasUrl, 'addOrder', {
-    order: enrichedOrder,
-    ...enrichedOrder
-  });
+  return sendGasAction(gasUrl, 'newOrder', { order });
 }
 
+/**
+ * Sinkronisasi Perubahan Status Produksi Pesanan
+ */
 export async function syncGasUpdateOrderStatus(
   gasUrl: string | undefined,
   orderId: string,
@@ -218,6 +285,9 @@ export async function syncGasUpdateOrderStatus(
   });
 }
 
+/**
+ * Sinkronisasi Perubahan Status Pembayaran Pesanan
+ */
 export async function syncGasUpdateOrderBayar(
   gasUrl: string | undefined,
   orderId: string,
@@ -226,67 +296,51 @@ export async function syncGasUpdateOrderBayar(
   return sendGasAction(gasUrl, 'updateOrderBayar', { orderId, statusBayar });
 }
 
+/**
+ * Sinkronisasi Penghapusan Pesanan
+ */
 export async function syncGasDeleteOrder(gasUrl: string | undefined, orderId: string): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'deleteOrder', { id: orderId, orderId });
+  return sendGasAction(gasUrl, 'deleteOrder', { orderId });
 }
 
-export async function syncGasNewCustomer(gasUrl: string | undefined, user: any): Promise<GasResponse> {
-  const nama = user.Nama || user.nama || 'Customer';
-  const noWA = user.NoWA || user.noWA || user.nowa || '';
-  const kode = user.KodeKhusus || user.kode || user.kodeKhusus || '-';
-  const id = user.ID || user.id || ('C' + Date.now());
-  const alamat = user.Alamat || user.alamat || 'Yogyakarta';
-  const password = user.Password || user.password || 'cust123';
-  const role = user.Role || user.role || 'customer';
-  const email = user.Email || user.email || (nama ? (String(nama).toLowerCase().replace(/[^a-z0-9]/g, '') + '@gmail.com') : '');
-  const tglDaftar = user.TglDaftar || user.tglDaftar || new Date().toISOString();
-
-  const normalizedUser = {
-    ID: id,
-    Role: role,
-    KodeKhusus: kode,
-    Nama: nama,
-    NoWA: noWA,
-    Alamat: alamat,
-    Password: password,
-    Email: email,
-    TglDaftar: tglDaftar,
-    // Lowercase aliases for any backend script variant
-    id,
-    role,
-    kode,
-    kodeKhusus: kode,
-    nama,
-    noWA,
-    nowa: noWA,
-    alamat,
-    password,
-    email,
-    tglDaftar
-  };
-
-  return sendGasAction(gasUrl, 'registerCustomer', {
-    user: normalizedUser,
-    ...normalizedUser
-  });
-}
-
+/**
+ * Sinkronisasi Produk Baru / Edit Produk
+ */
 export async function syncGasProduct(gasUrl: string | undefined, product: any): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'addProduct', { product });
+  return sendGasAction(gasUrl, 'saveProduct', { product });
 }
 
+/**
+ * Sinkronisasi Hapus Produk
+ */
 export async function syncGasDeleteProduct(gasUrl: string | undefined, productId: string): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'deleteProduct', { id: productId, productId });
+  return sendGasAction(gasUrl, 'deleteProduct', { productId });
 }
 
+/**
+ * Sinkronisasi Customer Baru
+ */
+export async function syncGasNewCustomer(gasUrl: string | undefined, user: any): Promise<GasResponse> {
+  return sendGasAction(gasUrl, 'newCustomer', { user });
+}
+
+/**
+ * Sinkronisasi Pengeluaran Baru
+ */
 export async function syncGasExpense(gasUrl: string | undefined, expense: any): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'addExpense', { expense });
+  return sendGasAction(gasUrl, 'newExpense', { expense });
 }
 
+/**
+ * Sinkronisasi Hapus Pengeluaran
+ */
 export async function syncGasDeleteExpense(gasUrl: string | undefined, expenseId: string): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'deleteExpense', { id: expenseId, expenseId });
+  return sendGasAction(gasUrl, 'deleteExpense', { expenseId });
 }
 
+/**
+ * Sinkronisasi Pengaturan Profil Toko
+ */
 export async function syncGasStoreData(gasUrl: string | undefined, storeData: any): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'saveAllStoreData', { storeData });
+  return sendGasAction(gasUrl, 'updateStoreData', { storeData });
 }

@@ -8,16 +8,16 @@ import {
   ExternalLink,
   Copy,
   Check,
-  Sparkles,
   Layers,
-  ChevronDown,
-  ChevronUp,
   Globe,
   ShieldCheck,
-  Cpu
+  Cpu,
+  Link,
+  Info
 } from 'lucide-react';
 import { StoreData } from '../types';
-import { GAS_CONFIG, getActiveGasUrl } from '../config/gasConfig';
+import { GAS_CONFIG } from '../config/gasConfig';
+import { fetchAllDataFromGas } from '../services/gasSyncService';
 
 interface AdminGasSyncManagerProps {
   storeData: StoreData;
@@ -42,22 +42,30 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
   counts
 }) => {
   const currentSpreadsheetId = storeData.spreadsheet_id || GAS_CONFIG.SPREADSHEET_ID;
-  const currentWebUrl = storeData.gas_web_app_url || GAS_CONFIG.DEFAULT_WEB_APP_URL;
+  const currentWebUrl = storeData.gas_web_app_url || GAS_CONFIG.DEFAULT_WEB_APP_URL || '';
 
   const [customWebUrl, setCustomWebUrl] = useState(currentWebUrl);
-  const [showDeploymentSettings, setShowDeploymentSettings] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
+  const [isTestingUrl, setIsTestingUrl] = useState(false);
   const [copiedSheetId, setCopiedSheetId] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [testUrlResult, setTestUrlResult] = useState<{
+    type: 'success' | 'error';
+    message: string;
+    details?: string;
+  } | null>(null);
+
   const [syncStatus, setSyncStatus] = useState<{
     type: 'idle' | 'success' | 'error';
     message: string;
   }>({
-    type: storeData.last_synced_at ? 'success' : 'idle',
+    type: storeData.last_synced_at ? 'success' : currentWebUrl ? 'idle' : 'error',
     message: storeData.last_synced_at
       ? `Terakhir disinkronkan: ${new Date(storeData.last_synced_at).toLocaleString('id-ID')}`
-      : 'Sistem otomatis terhubung ke skrip Code.gs & Google Sheets'
+      : currentWebUrl
+      ? 'URL Web App terhubung. Klik "Sync Now" untuk menarik data terbaru.'
+      : 'URL Web App Google Sheets belum terhubung. Tempelkan URL deployment di bawah ini.'
   });
 
   const handleCopySheetId = () => {
@@ -74,18 +82,65 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
     setTimeout(() => setCopiedUrl(false), 2000);
   };
 
-  const handleSaveCustomUrl = () => {
+  const handleSaveAndTestUrl = async () => {
     const trimmed = customWebUrl.trim();
-    onUpdateStoreData({
-      gas_web_app_url: trimmed,
-      spreadsheet_id: currentSpreadsheetId
-    });
-    setSyncStatus({
-      type: 'success',
-      message: trimmed
-        ? 'URL Deployment Web App berhasil disimpan ke sistem!'
-        : 'Sistem kembali menggunakan setelan otomatis bawaan Code.gs'
-    });
+    if (!trimmed) {
+      setTestUrlResult({
+        type: 'error',
+        message: 'Masukkan URL Deployment Web App Google Apps Script (berakhiran /exec)'
+      });
+      return;
+    }
+
+    if (!trimmed.startsWith('https://script.google.com/')) {
+      setTestUrlResult({
+        type: 'error',
+        message: 'Format URL salah! URL harus diawali dengan https://script.google.com/macros/s/.../exec'
+      });
+      return;
+    }
+
+    setIsTestingUrl(true);
+    setTestUrlResult(null);
+
+    try {
+      // Uji koneksi langsung
+      const testRes = await fetchAllDataFromGas(trimmed);
+      if (testRes.success && testRes.data) {
+        const uCount = testRes.data.users?.length || 0;
+        const pCount = testRes.data.products?.length || 0;
+        const oCount = testRes.data.orders?.length || 0;
+
+        // Simpan ke state global toko (otomatis disinkronkan ke server untuk semua perangkat)
+        onUpdateStoreData({
+          gas_web_app_url: trimmed,
+          spreadsheet_id: currentSpreadsheetId,
+          last_synced_at: new Date().toISOString()
+        });
+
+        setTestUrlResult({
+          type: 'success',
+          message: `Koneksi Google Spreadsheet BERHASIL! Ditemukan: ${oCount} pesanan, ${pCount} produk, ${uCount} customer.`,
+          details: 'URL telah disimpan permanen ke server. Seluruh perangkat baru kini otomatis terhubung!'
+        });
+
+        // Trigger update data lokal
+        onTriggerSyncNow(trimmed);
+      } else {
+        setTestUrlResult({
+          type: 'error',
+          message: testRes.message || 'Gagal membaca data dari Google Spreadsheet.',
+          details: 'Pastikan saat Deploy Web App, izin akses disetel ke "Anyone" (Siapa Saja).'
+        });
+      }
+    } catch (err: any) {
+      setTestUrlResult({
+        type: 'error',
+        message: `Kendala koneksi: ${err?.message || 'Gagal memanggil skrip'}`
+      });
+    } finally {
+      setIsTestingUrl(false);
+    }
   };
 
   const handleSyncNow = async () => {
@@ -128,7 +183,7 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
     setIsPushing(true);
     setSyncStatus({
       type: 'idle',
-      message: 'Mengirimkan seluruh data (Pesanan, Produk, Customer, Pengeluaran) ke Google Spreadsheet...'
+      message: 'Mengirimkan seluruh data lokal (Pesanan, Produk, Customer, Pengeluaran) ke Google Spreadsheet...'
     });
 
     try {
@@ -173,11 +228,11 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
               </h3>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
                 <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                <span>Terpusat di Code.gs</span>
+                <span>Multi-Device Sync</span>
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Semua data pesanan, customer, dan produk disinkronkan otomatis sesuai file Code.gs
+              Sinkronisasi data pesanan, customer, dan produk toko dengan Google Spreadsheet
             </p>
           </div>
         </div>
@@ -192,29 +247,25 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
         </button>
       </div>
 
-      {/* Card Info Terpusat (User & Admin tidak perlu konfigurasi di akun) */}
+      {/* Card Info Spreadsheet Master */}
       <div className="p-4 bg-linear-to-br from-slate-900 to-teal-950 text-white rounded-2xl space-y-3 shadow-sm">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse"></span>
             <span className="font-bold text-xs text-teal-200">
-              Sinkronisasi Otomatis Seluruh Pengguna
+              Google Spreadsheet Master Toko Alinea Desain
             </span>
           </div>
           <span className="text-[10px] text-teal-300 font-mono bg-teal-900/60 px-2 py-0.5 rounded-full border border-teal-700">
-            Zero-Config Client
+            ID Terpasang
           </span>
         </div>
-
-        <p className="text-[11px] text-slate-300 leading-relaxed">
-          Pengaturan database telah dipusatkan pada file skrip <strong>Code.gs</strong>. Setiap pengguna (Customer, Kasir, atau Admin) tidak perlu memasukkan ID Spreadsheet maupun URL Web App di pengaturan akun masing-masing.
-        </p>
 
         {/* Informasi Spreadsheet Aktif */}
         <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="space-y-0.5">
-            <span className="text-[10px] uppercase font-bold text-teal-400 tracking-wider">
-              Google Spreadsheet Terhubung (ID)
+            <span className="text-[9px] uppercase font-bold text-teal-400 tracking-wider">
+              Google Spreadsheet ID
             </span>
             <p className="font-mono text-xs font-semibold text-slate-100 break-all">
               {currentSpreadsheetId}
@@ -242,6 +293,83 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
         </div>
       </div>
 
+      {/* Bagian Input & Hubungkan Web App URL */}
+      <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 font-bold text-slate-800 text-xs">
+            <Link className="w-4 h-4 text-teal-600" />
+            <span>Tautan Deployment Web App Google Apps Script</span>
+          </div>
+          {currentWebUrl && (
+            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              <span>URL Terhubung</span>
+            </span>
+          )}
+        </div>
+
+        <p className="text-[11px] text-slate-600 leading-relaxed">
+          Salin URL Web App yang didapat dari menu <strong>Deploy &gt; New deployment &gt; Web app</strong> di Google Apps Script spreadsheet Anda. Saat disimpan, URL ini otomatis tersimpan ke server sehingga perangkat lain (HP kasir, tablet, laptop baru) langsung terhubung secara otomatis.
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="url"
+              value={customWebUrl}
+              onChange={(e) => setCustomWebUrl(e.target.value)}
+              placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+              className="w-full text-xs pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl font-mono text-slate-800 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveAndTestUrl}
+            disabled={isTestingUrl}
+            className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isTestingUrl ? 'animate-spin' : ''}`} />
+            <span>{isTestingUrl ? 'Menguji Koneksi...' : 'Simpan & Uji Koneksi Sheet'}</span>
+          </button>
+        </div>
+
+        {customWebUrl && (
+          <div className="flex items-center gap-2 pt-0.5">
+            <button
+              type="button"
+              onClick={handleCopyUrl}
+              className="text-[10px] text-slate-500 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
+            >
+              {copiedUrl ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+              <span>{copiedUrl ? 'URL Tersalin' : 'Salin URL'}</span>
+            </button>
+          </div>
+        )}
+
+        {testUrlResult && (
+          <div
+            className={`p-3 rounded-xl border flex items-start gap-2.5 ${
+              testUrlResult.type === 'success'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                : 'bg-rose-50 border-rose-300 text-rose-950'
+            }`}
+          >
+            {testUrlResult.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1">
+              <p className="font-bold text-xs">{testUrlResult.message}</p>
+              {testUrlResult.details && (
+                <p className="text-[10px] mt-0.5 opacity-80">{testUrlResult.details}</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Status Box */}
       <div
         className={`p-3.5 rounded-2xl border flex items-start gap-2.5 transition ${
@@ -264,7 +392,7 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
             {syncStatus.type === 'success'
               ? 'Sinkronisasi Aktif'
               : syncStatus.type === 'error'
-              ? 'Kendala Sinkronisasi'
+              ? 'Perlu Perhatian'
               : 'Status Koneksi Database'}
           </p>
           <p className="text-[11px] leading-relaxed mt-0.5 opacity-90">{syncStatus.message}</p>
@@ -316,65 +444,18 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
         )}
       </div>
 
-      {/* Accordion Opsional: Deployment URL Web App (Hanya untuk Admin jika dibutuhkan) */}
-      <div className="border border-slate-200/80 rounded-2xl overflow-hidden mt-3">
-        <button
-          type="button"
-          onClick={() => setShowDeploymentSettings(!showDeploymentSettings)}
-          className="w-full p-3 bg-slate-50/80 hover:bg-slate-100/80 flex items-center justify-between text-left transition cursor-pointer"
-        >
-          <div className="flex items-center gap-2">
-            <Globe className="w-3.5 h-3.5 text-slate-500" />
-            <span className="font-bold text-slate-700 text-xs">
-              Pengaturan URL Deployment Web App (Opsional)
-            </span>
-            <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-medium">
-              Opsional
-            </span>
-          </div>
-          {showDeploymentSettings ? (
-            <ChevronUp className="w-4 h-4 text-slate-400" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-slate-400" />
-          )}
-        </button>
-
-        {showDeploymentSettings && (
-          <div className="p-4 bg-white space-y-3 border-t border-slate-200/80">
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              Jika Anda men-deploy Google Apps Script sebagai <em>Web App</em> di luar Google Sheets, Anda dapat menempelkan URL berakhiran <code className="font-mono bg-slate-100 px-1 py-0.5 rounded">/exec</code> di sini. Pengaturan ini otomatis tersimpan secara global sehingga pengguna lain tidak perlu mengisinya.
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="url"
-                value={customWebUrl}
-                onChange={(e) => setCustomWebUrl(e.target.value)}
-                placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-                className="flex-1 text-xs p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-slate-800 focus:bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleSaveCustomUrl}
-                className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs transition cursor-pointer shrink-0"
-              >
-                Simpan URL
-              </button>
-            </div>
-            {customWebUrl && (
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleCopyUrl}
-                  className="text-[10px] text-slate-500 hover:text-slate-700 flex items-center gap-1 cursor-pointer"
-                >
-                  {copiedUrl ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedUrl ? 'URL Tersalin' : 'Salin URL'}</span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+      {/* Panduan 3 Langkah Menghubungkan Google Sheets */}
+      <div className="p-3.5 bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-2 text-[11px] text-amber-950">
+        <div className="flex items-center gap-1.5 font-bold text-amber-900">
+          <Info className="w-4 h-4 text-amber-700" />
+          <span>Panduan Cepat Menghubungkan Google Sheets ke Aplikasi:</span>
+        </div>
+        <ol className="list-decimal list-inside space-y-1 ml-1 text-slate-700 leading-relaxed">
+          <li>Buka Google Spreadsheet toko, lalu klik menu <strong>Ekstensi &gt; Apps Script</strong>.</li>
+          <li>Salin seluruh kode dari tombol <strong>"Lihat & Salin Code.gs"</strong> di atas, lalu tempelkan ke file <code>Code.gs</code> di Apps Script dan simpan (Ctrl+S).</li>
+          <li>Klik tombol biru <strong>Deploy (Terapkan) &gt; New deployment (Deployment baru)</strong>. Pilih tipe <strong>Web app</strong>, atur <em>Execute as:</em> <strong>Me</strong>, dan <em>Who has access:</em> <strong>Anyone (Siapa saja)</strong>.</li>
+          <li>Salin URL Web App yang dihasilkan (berakhiran <code>/exec</code>), lalu tempelkan di kotak isian di atas dan klik <strong>"Simpan & Uji Koneksi Sheet"</strong>.</li>
+        </ol>
       </div>
     </div>
   );
