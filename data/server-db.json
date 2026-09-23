@@ -41,20 +41,8 @@
       "Kategori": "meteran",
       "Harga": 21000,
       "Deskripsi": "Toko atau tempat usaha kerasa kurang tanpa adanya MMT / spanduk didepannya. Alinea Desain siap menerima pesanan MMT untuk kebutuhan toko maupun event apapun",
-      "Thumbnail": "https:                        </div>                        <div class=",
-      "Terjual": 10,
-      "HargaDesain": 15000,
-      "HargaCutting": "",
-      "HargaLaminating": 0
-    },
-    {
-      "ID": "P1789359421532",
-      "Nama": "MMT",
-      "Kategori": "meteran",
-      "Harga": 21000,
-      "Deskripsi": "Toko atau tempat usaha kerasa kurang tanpa adanya MMT / spanduk didepannya. Alinea Desain siap menerima pesanan MMT untuk kebutuhan toko maupun event apapun",
       "Thumbnail": "https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=400&auto=format&fit=crop&q=80",
-      "Terjual": 0,
+      "Terjual": 10,
       "HargaDesain": 15000,
       "HargaCutting": 0,
       "HargaLaminating": 0
@@ -152,7 +140,7 @@
     "nama_toko": "Alinea Desain",
     "tagline": "Solusi Desain & Cetak Anda",
     "logo_url": "",
-    "running_text": "Selamat datang di Alinea Desain! Dapatkan promo cetak kilat MMT & stiker presisi, konsultasi desain ramah, dan diskon instansi/kampus.",
+    "running_text": "Selamat datang di Percetakan Alinea Desain! Dapatkan Promo Cetak Kilat MMT & Stiker, Konsultasi Desain Ramah, dan Gratis Ongkir Area Kampus UGM & Sleman.",
     "running_text_speed": 22,
     "alamat": "Jl K.A Perwito Teluk, RT.01/RW.03, Ngreden, Kec. Wonosari, Kabupaten Klaten, Jawa Tengah 57473",
     "kontak": "085815950700",
@@ -242,12 +230,12 @@
     ],
     "spreadsheet_id": "1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc",
     "gas_web_app_url": "https://script.google.com/macros/s/AKfycby7KyaG5TOrNK_6QwPuhNMe-VW_7dGuluKehrY1L68fmOXpbLrLttO4Q85S-PmVAhf4/exec",
-    "last_synced_at": "2026-09-23T10:33:49.706Z",
+    "last_synced_at": "2026-09-23T10:49:21.490Z",
     "wa_provider": "fonnte",
     "wa_api_key": "9JPQEQhViYsp7Q6njJQv",
     "wa_api_url": "https://api.fonnte.com/send",
-    "wa_sender_number": "085815950700",
-    "wa_auto_order": true,
+    "wa_sender_number": "0895622909299",
+    "wa_auto_order": false,
     "wa_auto_status": true
   }
 }

@@ -38,7 +38,9 @@ import {
   syncGasExpense,
   syncGasDeleteExpense,
   fetchServerState,
-  saveServerState
+  saveServerState,
+  deduplicateProducts,
+  deduplicateUsers
 } from './services/gasSyncService';
 import {
   sendOrderCreatedNotification,
@@ -206,8 +208,8 @@ export default function App() {
               ...(s.storeData || {})
             };
             return {
-              users: (s.users && s.users.length > 0) ? s.users : prev.users,
-              products: (s.products && s.products.length > 0) ? s.products : prev.products,
+              users: (s.users && s.users.length > 0) ? deduplicateUsers(s.users) : prev.users,
+              products: (s.products && s.products.length > 0) ? deduplicateProducts(s.products) : prev.products,
               orders: (s.orders && s.orders.length > 0) ? s.orders : prev.orders,
               expenses: (s.expenses && s.expenses.length > 0) ? s.expenses : prev.expenses,
               storeData: mergedStore
@@ -220,8 +222,8 @@ export default function App() {
               if (isMounted && gasRes.success && gasRes.data) {
                 const remote = gasRes.data;
                 setAppData((prev) => ({
-                  users: (remote.users && remote.users.length > 0) ? remote.users : prev.users,
-                  products: (remote.products && remote.products.length > 0) ? remote.products : prev.products,
+                  users: (remote.users && remote.users.length > 0) ? deduplicateUsers(remote.users) : prev.users,
+                  products: (remote.products && remote.products.length > 0) ? deduplicateProducts(remote.products) : prev.products,
                   orders: (remote.orders && remote.orders.length > 0) ? remote.orders : prev.orders,
                   expenses: (remote.expenses && remote.expenses.length > 0) ? remote.expenses : prev.expenses,
                   storeData: {
@@ -853,7 +855,7 @@ export default function App() {
       setAppData((prev) => ({
         ...prev,
         users: (remoteData.users && remoteData.users.length > 0)
-          ? remoteData.users.map((u: any) => ({
+          ? deduplicateUsers(remoteData.users.map((u: any) => ({
               ...u,
               ID: String(u.ID || `U-${Date.now()}`),
               Role: (u.Role === 'admin' ? 'admin' : 'customer') as 'admin' | 'customer',
@@ -864,10 +866,10 @@ export default function App() {
               Password: String(u.Password ?? ''),
               Email: u.Email ? String(u.Email) : undefined,
               TglDaftar: u.TglDaftar ? String(u.TglDaftar) : new Date().toISOString()
-            }))
+            })))
           : prev.users,
         products: (remoteData.products && remoteData.products.length > 0)
-          ? remoteData.products.map((p: any) => ({
+          ? deduplicateProducts(remoteData.products.map((p: any) => ({
               ...p,
               ID: String(p.ID),
               Harga: Number(p.Harga || 0),
@@ -875,7 +877,7 @@ export default function App() {
               HargaDesain: p.HargaDesain !== undefined && p.HargaDesain !== null && p.HargaDesain !== '' ? Number(p.HargaDesain) : 15000,
               HargaCutting: p.HargaCutting !== undefined && p.HargaCutting !== null && p.HargaCutting !== '' ? Number(p.HargaCutting) : 0,
               HargaLaminating: p.HargaLaminating !== undefined && p.HargaLaminating !== null && p.HargaLaminating !== '' ? Number(p.HargaLaminating) : 0
-            }))
+            })))
           : prev.products,
         orders: (remoteData.orders && remoteData.orders.length > 0)
           ? remoteData.orders.map((o: any) => {
@@ -1225,9 +1227,9 @@ export default function App() {
                       {(showAllHomeProducts
                         ? appData.products
                         : appData.products.slice(0, 4)
-                      ).map((p) => (
+                      ).map((p, idx) => (
                         <div
-                          key={p.ID}
+                          key={`${p.ID || 'prod'}-${idx}`}
                           onClick={() => setSelectedProductForDetail(p)}
                           className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-400 cursor-pointer transition flex flex-col justify-between group"
                         >
@@ -1386,8 +1388,8 @@ export default function App() {
                                 }}
                                 className="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none"
                               >
-                                {appData.products.map((p) => (
-                                  <option key={p.ID} value={p.ID}>
+                                {appData.products.map((p, idx) => (
+                                  <option key={`${p.ID || 'p'}-${idx}`} value={p.ID}>
                                     {p.Nama} - {formatRp(p.Harga)} ({p.Kategori})
                                   </option>
                                 ))}
@@ -1751,9 +1753,9 @@ export default function App() {
 
                   {/* Products Grid */}
                   <div className="grid grid-cols-2 gap-3">
-                    {displayedProducts.map((p) => (
+                    {displayedProducts.map((p, idx) => (
                       <div
-                        key={p.ID}
+                        key={`${p.ID || 'prod'}-${idx}`}
                         onClick={() => setSelectedProductForDetail(p)}
                         className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-400 cursor-pointer transition flex flex-col justify-between group"
                       >
@@ -2544,9 +2546,9 @@ export default function App() {
                   </div>
 
                   <div className="space-y-2.5">
-                    {appData.products.map((p) => (
+                    {appData.products.map((p, idx) => (
                       <div
-                        key={p.ID}
+                        key={`${p.ID || 'prod'}-${idx}`}
                         className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2"
                       >
                         <div className="flex gap-3 items-start">

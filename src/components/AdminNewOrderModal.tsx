@@ -361,8 +361,8 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                   onChange={(e) => setSelectedCustomerId(e.target.value)}
                   className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
                 >
-                  {filteredCustomers.map((c) => (
-                    <option key={c.ID} value={c.ID}>
+                  {filteredCustomers.map((c, idx) => (
+                    <option key={`${c.ID || 'c'}-${idx}`} value={c.ID}>
                       {c.Nama} ({c.KodeKhusus}) - WA: {c.NoWA}
                     </option>
                   ))}
@@ -526,8 +526,8 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                       }}
                       className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
                     >
-                      {products.map((p) => (
-                        <option key={p.ID} value={p.ID}>
+                      {products.map((p, idx) => (
+                        <option key={`${p.ID || 'p'}-${idx}`} value={p.ID}>
                           {p.Nama} ({p.Kategori === 'meteran' ? 'Meteran' : 'Satuan'}) - {formatRp(p.Harga)}
                         </option>
                       ))}

@@ -399,9 +399,21 @@ export function loadStoredData(): AppStateData {
     };
 
     // Ensure all arrays and nested objects are present
+    const rawProducts = (parsed.products && parsed.products.length > 0) ? parsed.products : DEFAULT_PRODUCTS;
+    const seenPIds = new Set<string>();
+    const uniqueProducts: Product[] = [];
+    for (const p of rawProducts) {
+      if (!p) continue;
+      const pid = String(p.ID || '');
+      if (pid && !seenPIds.has(pid)) {
+        seenPIds.add(pid);
+        uniqueProducts.push(p);
+      }
+    }
+
     return {
       users: loadedUsers,
-      products: (parsed.products && parsed.products.length > 0) ? parsed.products : DEFAULT_PRODUCTS,
+      products: uniqueProducts.length > 0 ? uniqueProducts : DEFAULT_PRODUCTS,
       orders: parsed.orders || DEFAULT_ORDERS,
       expenses: parsed.expenses || DEFAULT_EXPENSES,
       storeData: mergedStoreData

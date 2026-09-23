@@ -170,6 +170,52 @@ export async function sendGasAction(
 }
 
 /**
+ * Membersihkan duplikasi produk berdasarkan ID unik agar tidak ada duplikat key di React
+ */
+export function deduplicateProducts(products: any[]): any[] {
+  if (!Array.isArray(products)) return [];
+  const seen = new Set<string>();
+  const cleaned: any[] = [];
+
+  for (const p of products) {
+    if (!p) continue;
+    const rawId = p.ID ? String(p.ID).trim() : '';
+    // Jika tidak ada ID, buat ID fallback unik
+    const id = rawId || `P-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    if (!seen.has(id)) {
+      seen.add(id);
+      cleaned.push({
+        ...p,
+        ID: id
+      });
+    }
+  }
+  return cleaned;
+}
+
+/**
+ * Membersihkan duplikasi user berdasarkan ID atau Kode/NoWA
+ */
+export function deduplicateUsers(users: any[]): any[] {
+  if (!Array.isArray(users)) return [];
+  const seenId = new Set<string>();
+  const cleaned: any[] = [];
+
+  for (const u of users) {
+    if (!u) continue;
+    const id = u.ID ? String(u.ID).trim() : `U-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    if (!seenId.has(id)) {
+      seenId.add(id);
+      cleaned.push({
+        ...u,
+        ID: id
+      });
+    }
+  }
+  return cleaned;
+}
+
+/**
  * Mengambil seluruh data dari Google Spreadsheet (GET)
  * Menggunakan server proxy /api/gas-fetch untuk melewati kendala CORS pada browser/perangkat baru.
  */
@@ -190,7 +236,11 @@ export async function fetchAllDataFromGas(gasUrl?: string): Promise<GasResponse>
         return {
           success: true,
           message: 'Data berhasil ditarik dari Google Spreadsheet!',
-          data
+          data: {
+            ...data,
+            products: deduplicateProducts(data.products || []),
+            users: deduplicateUsers(data.users || [])
+          }
         };
       }
       if (data.success === false) {
@@ -228,7 +278,11 @@ export async function fetchAllDataFromGas(gasUrl?: string): Promise<GasResponse>
     return {
       success: true,
       message: 'Data berhasil ditarik dari Google Spreadsheet!',
-      data
+      data: {
+        ...data,
+        products: deduplicateProducts(data.products || []),
+        users: deduplicateUsers(data.users || [])
+      }
     };
   } catch (err: any) {
     return {
