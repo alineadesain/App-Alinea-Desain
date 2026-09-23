@@ -523,7 +523,7 @@ function addOrder(data) {
               newCustKode,
               namaCustomer,
               noCustomer,
-              'Yogyakarta',
+              'Klaten',
               'cust123',
               custEmail,
               new Date().toISOString()
@@ -533,6 +533,22 @@ function addOrder(data) {
       }
     } catch (uErr) {
       Logger.log("Auto-save user in addOrder error: " + uErr.message);
+    }
+
+    // Kirim notifikasi WhatsApp otomatis ke Customer jika nomor WA ada (menggunakan CONFIG.WA_API_KEY)
+    try {
+      if (noCustomer && noCustomer !== '-' && String(noCustomer).length >= 7) {
+        const waMsg = "Halo Kak *" + (namaCustomer || 'Pelanggan') + "*, pesanan Anda di *Alinea Desain* telah berhasil dicatat! 📋\n\n" +
+          "• *No. Pesanan:* " + id + "\n" +
+          "• *Produk:* " + (namaProduk || 'Produk Cetak') + " (" + qty + "x)\n" +
+          "• *Total Biaya:* Rp " + Number(totalHarga).toLocaleString('id-ID') + "\n" +
+          "• *Status Bayar:* " + statusBayar + (dp > 0 ? " (DP: Rp " + Number(dp).toLocaleString('id-ID') + ")" : "") + "\n" +
+          "• *Status Produksi:* " + (statusOrder || 'Order Masuk') + "\n\n" +
+          "Pesanan Anda segera kami proses dengan rapi & presisi. Terima kasih! 🙏";
+        sendWA(noCustomer, waMsg);
+      }
+    } catch (waErr) {
+      Logger.log("Auto-WA new order: " + waErr.message);
     }
 
     return { success: true, id: id };
@@ -551,8 +567,12 @@ function updateOrderStatus(orderId, status, noCustomer, orderDetailText) {
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(orderId)) {
         sheet.getRange(i + 1, 18).setValue(status);
-        if (status === 'Selesai' && noCustomer) {
-          sendWA(noCustomer, `Halo, pesanan Anda di Alinea Desain (*${orderId}*) telah *SELESAI* dan siap diambil/dikirim.\n\nDetail:\n${orderDetailText || ''}\n\nTerima kasih atas kepercayaan Anda!`);
+        if (noCustomer && noCustomer !== '-') {
+          if (status === 'Selesai') {
+            sendWA(noCustomer, "Halo Kak, pesanan Anda di *Alinea Desain* (*" + orderId + "*) telah *SELESAI* dan siap diambil/dikirim.\n\nDetail:\n" + (orderDetailText || '') + "\n\nTerima kasih telah mempercayakan cetakan Anda kepada kami! 🙏");
+          } else if (status === 'Siap Diambil') {
+            sendWA(noCustomer, "Halo Kak, pesanan Anda di *Alinea Desain* (*" + orderId + "*) sudah *SIAP DIAMBIL* di toko kami.\n\nAlamat: Jl K.A Perwito Teluk, RT.01/RW.03, Ngreden, Wonosari, Klaten.\nTerima kasih! 🙏");
+          }
         }
         return { success: true };
       }

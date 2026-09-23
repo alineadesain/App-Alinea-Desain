@@ -24,6 +24,7 @@ import { LoginPortalModal } from './components/LoginPortalModal';
 import { AdminStoreBrandingManager } from './components/AdminStoreBrandingManager';
 import { AdminGasSyncManager } from './components/AdminGasSyncManager';
 import { AdminWhatsAppConfigManager } from './components/AdminWhatsAppConfigManager';
+import { getActiveGasUrl, isRunningInAppsScript, GAS_CONFIG } from './config/gasConfig';
 import {
   pushAllDatabaseToGas,
   fetchAllDataFromGas,
@@ -243,6 +244,10 @@ export default function App() {
   // Grand total of active customer order form
   const orderGrandTotal = orderItems.reduce((acc, curr) => acc + calculateItemTotal(curr), 0);
 
+  // Helper URL & ketersediaan Google Apps Script (otomatis sinkron tanpa perlu setting di akun)
+  const getGasUrl = () => getActiveGasUrl(appData.storeData.gas_web_app_url);
+  const isGasAvailable = () => Boolean(getGasUrl()) || isRunningInAppsScript();
+
   // Handle Customer Order Submission (with multi-item & DP support)
   const handleSubmitCustomerOrder = () => {
     if (!currentUser) return;
@@ -341,8 +346,8 @@ export default function App() {
     }));
 
     // Otomatis sinkronkan pesanan baru ke Google Apps Script Spreadsheet
-    if (appData.storeData.gas_web_app_url) {
-      syncGasNewOrder(appData.storeData.gas_web_app_url, unifiedOrder).catch((e) =>
+    if (isGasAvailable()) {
+      syncGasNewOrder(getGasUrl(), unifiedOrder).catch((e) =>
         console.warn('Sync order ke GAS:', e)
       );
     }
@@ -378,7 +383,7 @@ export default function App() {
     }));
 
     // Otomatis sinkronkan perubahan status ke Google Spreadsheet
-    if (appData.storeData.gas_web_app_url) {
+    if (isGasAvailable()) {
       const ord = appData.orders.find((o) => o.ID === orderId);
       if (ord) {
         // Ambil nomor tujuan customer langsung dari data sheet users
@@ -389,7 +394,7 @@ export default function App() {
         );
 
         syncGasUpdateOrderStatus(
-          appData.storeData.gas_web_app_url,
+          getGasUrl(),
           orderId,
           newStatus,
           customerPhone,
@@ -408,8 +413,8 @@ export default function App() {
     }));
 
     // Otomatis sinkronkan status bayar ke Google Spreadsheet
-    if (appData.storeData.gas_web_app_url) {
-      syncGasUpdateOrderBayar(appData.storeData.gas_web_app_url, orderId, newBayar).catch((e) =>
+    if (isGasAvailable()) {
+      syncGasUpdateOrderBayar(getGasUrl(), orderId, newBayar).catch((e) =>
         console.warn('Sync bayar ke GAS:', e)
       );
     }
@@ -428,8 +433,8 @@ export default function App() {
       }));
 
       // Otomatis sinkronkan penghapusan pesanan ke Google Spreadsheet
-      if (appData.storeData.gas_web_app_url) {
-        syncGasDeleteOrder(appData.storeData.gas_web_app_url, orderId).catch((e) =>
+      if (isGasAvailable()) {
+        syncGasDeleteOrder(getGasUrl(), orderId).catch((e) =>
           console.warn('Sync hapus pesanan ke GAS:', e)
         );
       }
@@ -445,8 +450,8 @@ export default function App() {
     }));
 
     // Otomatis sinkronkan pengeluaran ke Google Spreadsheet
-    if (appData.storeData.gas_web_app_url) {
-      syncGasExpense(appData.storeData.gas_web_app_url, newExp).catch((e) =>
+    if (isGasAvailable()) {
+      syncGasExpense(getGasUrl(), newExp).catch((e) =>
         console.warn('Sync pengeluaran ke GAS:', e)
       );
     }
@@ -464,8 +469,8 @@ export default function App() {
       }));
 
       // Otomatis sinkronkan hapus pengeluaran ke Google Spreadsheet
-      if (appData.storeData.gas_web_app_url) {
-        syncGasDeleteExpense(appData.storeData.gas_web_app_url, expId).catch((e) =>
+      if (isGasAvailable()) {
+        syncGasDeleteExpense(getGasUrl(), expId).catch((e) =>
           console.warn('Sync hapus pengeluaran ke GAS:', e)
         );
       }
@@ -577,8 +582,8 @@ export default function App() {
     });
 
     // Otomatis sinkronkan produk ke Google Spreadsheet
-    if (appData.storeData.gas_web_app_url) {
-      syncGasProduct(appData.storeData.gas_web_app_url, product).catch((e) =>
+    if (isGasAvailable()) {
+      syncGasProduct(getGasUrl(), product).catch((e) =>
         console.warn('Sync produk ke GAS:', e)
       );
     }
@@ -596,8 +601,8 @@ export default function App() {
       }));
 
       // Otomatis sinkronkan hapus produk ke Google Spreadsheet
-      if (appData.storeData.gas_web_app_url) {
-        syncGasDeleteProduct(appData.storeData.gas_web_app_url, productId).catch((e) =>
+      if (isGasAvailable()) {
+        syncGasDeleteProduct(getGasUrl(), productId).catch((e) =>
           console.warn('Sync hapus produk ke GAS:', e)
         );
       }
@@ -655,13 +660,13 @@ export default function App() {
     });
 
     // Otomatis sinkronkan pesanan admin & customer baru ke Google Spreadsheet
-    if (appData.storeData.gas_web_app_url) {
+    if (isGasAvailable()) {
       if (newCustomer) {
-        syncGasNewCustomer(appData.storeData.gas_web_app_url, newCustomer)
+        syncGasNewCustomer(getGasUrl(), newCustomer)
           .then((res) => console.log('Sync customer baru admin ke GAS sukses:', res))
           .catch((e) => console.warn('Sync customer baru ke GAS error:', e));
       }
-      syncGasNewOrder(appData.storeData.gas_web_app_url, readyOrder)
+      syncGasNewOrder(getGasUrl(), readyOrder)
         .then((res) => console.log('Sync pesanan admin ke GAS sukses:', res))
         .catch((e) => console.warn('Sync pesanan admin ke GAS error:', e));
     }
@@ -697,7 +702,9 @@ export default function App() {
   };
 
   // Trigger Sync Now for Google Apps Script Web App URL (Tarik Data dari Spreadsheet)
-  const handleTriggerGasSyncNow = async (url: string): Promise<{ success: boolean; message: string }> => {
+  const handleTriggerGasSyncNow = async (url?: string): Promise<{ success: boolean; message: string }> => {
+    const effectiveUrl = url || getGasUrl();
+
     // 1. If running inside Google Apps Script (iframe or GAS runtime)
     if (typeof (window as any).google !== 'undefined' && (window as any).google.script?.run) {
       return new Promise<{ success: boolean; message: string }>((resolve) => {
@@ -713,7 +720,7 @@ export default function App() {
                 storeData: {
                   ...prev.storeData,
                   ...(remoteData.storeData || {}),
-                  gas_web_app_url: url,
+                  gas_web_app_url: effectiveUrl,
                   last_synced_at: new Date().toISOString()
                 }
               }));
@@ -739,7 +746,7 @@ export default function App() {
     }
 
     // 2. If running on Web / Dev server: using fetchAllDataFromGas
-    const res = await fetchAllDataFromGas(url);
+    const res = await fetchAllDataFromGas(effectiveUrl);
     if (res.success && res.data) {
       const remoteData = res.data;
       setAppData((prev) => ({
@@ -810,7 +817,7 @@ export default function App() {
         storeData: {
           ...prev.storeData,
           ...(remoteData.storeData || {}),
-          gas_web_app_url: url,
+          gas_web_app_url: effectiveUrl,
           last_synced_at: new Date().toISOString()
         }
       }));
@@ -825,7 +832,7 @@ export default function App() {
       ...prev,
       storeData: {
         ...prev.storeData,
-        gas_web_app_url: url,
+        gas_web_app_url: effectiveUrl,
         last_synced_at: new Date().toISOString()
       }
     }));
@@ -837,9 +844,10 @@ export default function App() {
   };
 
   // Push / Unggah Seluruh Database Lokal Langsung ke Google Spreadsheet Sekaligus
-  const handlePushAllDatabaseToGas = async (url: string): Promise<{ success: boolean; message: string }> => {
+  const handlePushAllDatabaseToGas = async (url?: string): Promise<{ success: boolean; message: string }> => {
+    const effectiveUrl = url || getGasUrl();
     try {
-      const res = await pushAllDatabaseToGas(url, {
+      const res = await pushAllDatabaseToGas(effectiveUrl, {
         users: appData.users,
         products: appData.products,
         orders: appData.orders,
@@ -851,7 +859,7 @@ export default function App() {
         ...prev,
         storeData: {
           ...prev.storeData,
-          gas_web_app_url: url,
+          gas_web_app_url: effectiveUrl,
           last_synced_at: new Date().toISOString()
         }
       }));
@@ -898,8 +906,8 @@ export default function App() {
     });
 
     // Otomatis sinkronkan pendaftaran customer baru ke Google Spreadsheet
-    if (isNew && user.Role === 'customer' && appData.storeData.gas_web_app_url) {
-      syncGasNewCustomer(appData.storeData.gas_web_app_url, user)
+    if (isNew && user.Role === 'customer' && isGasAvailable()) {
+      syncGasNewCustomer(getGasUrl(), user)
         .then((res) => console.log('Sync customer baru ke Sheet Users sukses:', res))
         .catch((e) => console.warn('Sync customer baru ke GAS error:', e));
     }
@@ -2799,10 +2807,10 @@ export default function App() {
                         </span>
                         <h3 className="font-extrabold text-sm text-white flex items-center gap-2 mt-0.5">
                           <Database className="w-4 h-4 text-teal-400" />
-                          <span>Integrasi Google Sheets & WhatsApp API</span>
+                          <span>Integrasi Terpusat Google Sheets & WhatsApp (Code.gs)</span>
                         </h3>
                         <p className="text-[11px] text-slate-300 mt-0.5">
-                          Konfigurasi sinkronisasi spreadsheet dan notifikasi pesan otomatis
+                          Konfigurasi database & WhatsApp gateway terpusat di Code.gs. Semua pengguna otomatis terhubung.
                         </p>
                       </div>
                       <span className="bg-teal-500/20 text-teal-300 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-teal-500/30">

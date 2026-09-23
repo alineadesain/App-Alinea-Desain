@@ -4,6 +4,8 @@
  * tersimpan langsung ke Google Spreadsheet tanpa terkendala CORS browser.
  */
 
+import { getActiveGasUrl, isRunningInAppsScript } from '../config/gasConfig';
+
 export interface GasResponse<T = any> {
   success: boolean;
   message?: string;
@@ -22,11 +24,25 @@ export async function sendGasAction(
   action: string,
   payload: Record<string, any> = {}
 ): Promise<GasResponse> {
-  if (!gasUrl || !gasUrl.trim().startsWith('http')) {
-    return { success: false, message: 'URL Web App belum dikonfigurasi' };
+  // Dukungan langsung jika dijalankan di Google Apps Script (google.script.run)
+  if (isRunningInAppsScript()) {
+    try {
+      const gRun = (window as any).google.script.run;
+      if (typeof gRun[action] === 'function') {
+        gRun[action](payload);
+        return { success: true, message: 'Data dikirim via google.script.run' };
+      }
+    } catch (e: any) {
+      console.warn('google.script.run fallback error:', e);
+    }
   }
 
-  const cleanUrl = gasUrl.trim();
+  const effectiveUrl = getActiveGasUrl(gasUrl);
+  if (!effectiveUrl) {
+    return { success: false, message: 'URL Web App belum dikonfigurasi di Code.gs/Deployment' };
+  }
+
+  const cleanUrl = effectiveUrl.trim();
   const requestBody = JSON.stringify({
     action,
     ...payload,
@@ -92,12 +108,13 @@ export async function sendGasAction(
 /**
  * Mengambil seluruh data dari Google Spreadsheet (GET)
  */
-export async function fetchAllDataFromGas(gasUrl: string): Promise<GasResponse> {
-  if (!gasUrl || !gasUrl.trim().startsWith('http')) {
-    return { success: false, message: 'URL Web App tidak valid' };
+export async function fetchAllDataFromGas(gasUrl?: string): Promise<GasResponse> {
+  const effectiveUrl = getActiveGasUrl(gasUrl);
+  if (!effectiveUrl) {
+    return { success: false, message: 'URL Web App belum terkonfigurasi' };
   }
 
-  const cleanUrl = gasUrl.trim();
+  const cleanUrl = effectiveUrl.trim();
   const fetchUrl = cleanUrl.includes('?')
     ? `${cleanUrl}&action=fetchAllData&_t=${Date.now()}`
     : `${cleanUrl}?action=fetchAllData&_t=${Date.now()}`;
