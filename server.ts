@@ -163,15 +163,42 @@ async function startServer() {
     }
 
     try {
+      // 1. Coba via POST fetchAllData (karena doPost selalu mengembalikan JSON murni)
+      let postResponse = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'fetchAllData', timestamp: new Date().toISOString() }),
+        redirect: 'manual'
+      });
+
+      let redirectHops = 0;
+      while ((postResponse.status === 301 || postResponse.status === 302 || postResponse.status === 307 || postResponse.status === 308) && redirectHops < 5) {
+        const redirectUrl = postResponse.headers.get('location');
+        if (!redirectUrl) break;
+        postResponse = await fetch(redirectUrl, { method: 'GET' });
+        redirectHops++;
+      }
+
+      const text = await postResponse.text();
+      try {
+        const json = JSON.parse(text);
+        if (json && (json.users || json.products || json.orders || json.success !== undefined)) {
+          return res.json(json);
+        }
+      } catch {
+        // Abaikan parse error, coba fallback GET
+      }
+
+      // 2. Fallback via GET jika diperlukan
       const fetchUrl = url.includes('?')
         ? `${url}&action=fetchAllData&_t=${Date.now()}`
         : `${url}?action=fetchAllData&_t=${Date.now()}`;
 
-      const response = await fetch(fetchUrl);
-      const text = await response.text();
+      const getResponse = await fetch(fetchUrl);
+      const getText = await getResponse.text();
 
       try {
-        const json = JSON.parse(text);
+        const json = JSON.parse(getText);
         return res.json(json);
       } catch {
         return res.json({
@@ -204,13 +231,26 @@ async function startServer() {
         timestamp: new Date().toISOString()
       });
 
-      const response = await fetch(url, {
+      // Mengirim POST ke Google Apps Script dengan text/plain;charset=utf-8
+      // Google Apps Script merespon POST dengan HTTP 302 Redirect ke googleusercontent.com.
+      // Kita ikuti redirect secara manual menggunakan method GET agar mendapatkan konten JSON yang sesungguhnya.
+      let response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'text/plain;charset=utf-8'
         },
-        body: `postData=${encodeURIComponent(requestBody)}`
+        body: requestBody,
+        redirect: 'manual'
       });
+
+      // Jika GAS mengembalikan 301/302 Redirect, ikuti via GET
+      let redirectHops = 0;
+      while ((response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) && redirectHops < 5) {
+        const redirectUrl = response.headers.get('location');
+        if (!redirectUrl) break;
+        response = await fetch(redirectUrl, { method: 'GET' });
+        redirectHops++;
+      }
 
       const text = await response.text();
       try {
