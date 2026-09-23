@@ -108,7 +108,8 @@ export interface StoreData {
   rekening: string;
   clients_slider: ClientPartner[];
   banners?: BannerSlide[];
-  // Google Apps Script Web App Integration
+  // Google Apps Script & Spreadsheet Integration
+  spreadsheet_id?: string;
   gas_web_app_url?: string;
   last_synced_at?: string;
   // WhatsApp API Gateway Settings

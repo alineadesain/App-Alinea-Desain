@@ -19,12 +19,12 @@ export const GasCodeModal: React.FC<GasCodeModalProps> = ({ isOpen, onClose }) =
 // =================================================================
 
 const CONFIG = {
-  // Masukkan SPREADSHEET_ID jika menggunakan Apps Script standalone
+  // ID Spreadsheet Google Sheets Anda
   // (ID ada di URL: docs.google.com/spreadsheets/d/[SPREADSHEET_ID]/edit)
-  // Kosongkan ("") jika script dibuat langsung di dalam spreadsheet
-  SPREADSHEET_ID: "", 
+  SPREADSHEET_ID: "1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc", 
 
-  WA_API_KEY: "MASUKKAN_API_KEY_ANDA_DISINI", 
+  // Gateway WhatsApp Fonnte Anda
+  WA_API_KEY: "9JPQEQhViYsp7Q6njJQv", 
   WA_URL: "https://api.fonnte.com/send"
 };
 

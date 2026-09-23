@@ -39,6 +39,9 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
   onPushAllToGas,
   counts
 }) => {
+  const [spreadsheetId, setSpreadsheetId] = useState(
+    storeData.spreadsheet_id || '1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc'
+  );
   const [webAppUrl, setWebAppUrl] = useState(storeData.gas_web_app_url || '');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
@@ -49,14 +52,26 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
     type: storeData.last_synced_at ? 'success' : 'idle',
     message: storeData.last_synced_at
       ? `Terakhir disinkronkan: ${new Date(storeData.last_synced_at).toLocaleString('id-ID')}`
-      : 'Database belum disinkronkan dengan Web App URL'
+      : 'Database siap disinkronkan dengan Google Sheets & Apps Script'
   });
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedSheetId, setCopiedSheetId] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
 
   const isValidUrl =
     webAppUrl.trim().startsWith('https://script.google.com/macros/s/') &&
     webAppUrl.trim().endsWith('/exec');
+
+  const handleSaveSpreadsheetId = () => {
+    const trimmed = spreadsheetId.trim();
+    onUpdateStoreData({
+      spreadsheet_id: trimmed
+    });
+    setSyncStatus({
+      type: 'success',
+      message: `ID Spreadsheet tersimpan: ${trimmed}`
+    });
+  };
 
   const handleSyncNow = async () => {
     const trimmedUrl = webAppUrl.trim();
@@ -75,8 +90,9 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
     });
 
     try {
-      // Save URL locally first
+      // Save URL & Spreadsheet ID locally
       onUpdateStoreData({
+        spreadsheet_id: spreadsheetId.trim(),
         gas_web_app_url: trimmedUrl,
         last_synced_at: new Date().toISOString()
       });
@@ -121,6 +137,7 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
 
     try {
       onUpdateStoreData({
+        spreadsheet_id: spreadsheetId.trim(),
         gas_web_app_url: trimmedUrl,
         last_synced_at: new Date().toISOString()
       });
@@ -147,6 +164,13 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
     navigator.clipboard.writeText(webAppUrl);
     setCopiedUrl(true);
     setTimeout(() => setCopiedUrl(false), 2000);
+  };
+
+  const handleCopySheetId = () => {
+    if (!spreadsheetId) return;
+    navigator.clipboard.writeText(spreadsheetId);
+    setCopiedSheetId(true);
+    setTimeout(() => setCopiedSheetId(false), 2000);
   };
 
   return (
@@ -188,8 +212,61 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
         </button>
       </div>
 
-      {/* Input Field Kolom Web App URL & Tombol Sync Now */}
-      <div className="space-y-3">
+      {/* Input Field Kolom Spreadsheet ID & Web App URL */}
+      <div className="space-y-4">
+        {/* Kolom Spreadsheet ID */}
+        <div className="p-4 bg-sky-50/60 border border-sky-200/80 rounded-2xl space-y-2">
+          <label className="block font-bold text-slate-800 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-xs text-sky-950 font-bold">
+              <Database className="w-3.5 h-3.5 text-sky-600" />
+              Google Spreadsheet ID
+            </span>
+            <div className="flex items-center gap-2">
+              {spreadsheetId && (
+                <>
+                  <a
+                    href={`https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-sky-700 hover:text-sky-900 font-semibold flex items-center gap-1 underline underline-offset-2"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Buka Spreadsheet</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleCopySheetId}
+                    className="text-[10px] text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                  >
+                    {copiedSheetId ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedSheetId ? 'Tersalin' : 'Salin ID'}</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={spreadsheetId}
+              onChange={(e) => setSpreadsheetId(e.target.value)}
+              placeholder="Contoh: 1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc"
+              className="flex-1 text-xs p-2.5 bg-white border border-sky-300/80 rounded-xl font-mono text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleSaveSpreadsheetId}
+              className="bg-sky-700 hover:bg-sky-800 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs transition cursor-pointer shrink-0"
+            >
+              Simpan ID
+            </button>
+          </div>
+          <p className="text-[10px] text-sky-900/80">
+            ID ini sudah terpasang di <code className="font-mono font-bold bg-white px-1 py-0.5 rounded border border-sky-200">CONFIG.SPREADSHEET_ID</code> pada skrip <strong>Code.gs</strong> Google Apps Script.
+          </p>
+        </div>
+
+        {/* Kolom Web App URL */}
         <div>
           <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
             <span className="flex items-center gap-1.5">

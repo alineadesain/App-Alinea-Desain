@@ -166,11 +166,11 @@ export const DEFAULT_USERS: User[] = [
     Role: 'admin',
     KodeKhusus: '-',
     Nama: 'Admin Alinea',
-    NoWA: '081234567890',
-    Alamat: 'Jl. Prof. Dr. Sardjito No. 45, Yogyakarta',
+    NoWA: '085815950700',
+    Alamat: 'Klaten',
     Password: 'admin123',
     TglDaftar: '2025-01-01T08:00:00.000Z',
-    Email: 'alineadesain@gmail.com',
+    Email: 'admin@alineadesain.com',
     Avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80'
   },
   {
@@ -298,21 +298,22 @@ export const DEFAULT_EXPENSES: Expense[] = [
 
 export const DEFAULT_STORE_DATA: StoreData = {
   nama_toko: 'Alinea Desain',
-  tagline: 'Percetakan & Digital Printing Cepat Berkualitas',
+  tagline: 'Solusi Desain & Cetak Anda',
   logo_url: '',
-  running_text: 'Selamat datang di Percetakan Alinea Desain! Dapatkan Promo Cetak Kilat MMT & Stiker, Konsultasi Desain Ramah, dan Gratis Ongkir Area Kampus UGM & Sleman.',
+  running_text: 'Selamat datang di Alinea Desain! Dapatkan promo cetak kilat MMT & stiker presisi, konsultasi desain ramah, dan diskon instansi/kampus.',
   running_text_speed: 22,
-  alamat: 'Jl. Prof. Dr. Sardjito No. 45, Terban, Gondokusuman, Yogyakarta (Dekat Kampus UGM)',
-  kontak: '081234567890',
-  rekening: 'BCA 1234567890 a.n ALINEA DESAIN CREATIVE',
+  alamat: 'Jl K.A Perwito Teluk, RT.01/RW.03, Ngreden, Kec. Wonosari, Kabupaten Klaten, Jawa Tengah 57473',
+  kontak: '085815950700',
+  rekening: 'CIMB Niaga 763568966600 a.n Muhammad Rosyid Ridlo',
   clients_slider: DEFAULT_CLIENTS,
   banners: DEFAULT_BANNERS,
+  spreadsheet_id: '1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc',
   gas_web_app_url: '',
   last_synced_at: '',
   wa_provider: 'fonnte',
-  wa_api_key: '',
+  wa_api_key: '9JPQEQhViYsp7Q6njJQv',
   wa_api_url: 'https://api.fonnte.com/send',
-  wa_sender_number: '081234567890',
+  wa_sender_number: '085815950700',
   wa_auto_order: true,
   wa_auto_status: true
 };
@@ -362,7 +363,13 @@ export function loadStoredData(): AppStateData {
       if (normalized.Role === 'admin') {
         adminFound = true;
         if (normalized.Nama.toLowerCase() === 'admin alinea' || normalized.ID === 'U1') {
-          return { ...normalized, Nama: 'Admin Alinea', Password: 'admin123' };
+          return {
+            ...normalized,
+            Nama: 'Admin Alinea',
+            NoWA: normalized.NoWA && normalized.NoWA !== '081234567890' ? normalized.NoWA : '085815950700',
+            Alamat: normalized.Alamat && !normalized.Alamat.includes('Sardjito') ? normalized.Alamat : 'Klaten',
+            Password: 'admin123'
+          };
         }
       }
       return normalized;
@@ -372,21 +379,32 @@ export function loadStoredData(): AppStateData {
       loadedUsers.unshift(DEFAULT_USERS[0]);
     }
 
+    // Merge storeData with default storeData, ensuring spreadsheet_id and new store contact details are synced
+    const storedStore = parsed.storeData || {};
+    const mergedStoreData: StoreData = {
+      ...DEFAULT_STORE_DATA,
+      ...storedStore,
+      nama_toko: storedStore.nama_toko || DEFAULT_STORE_DATA.nama_toko,
+      tagline: (storedStore.tagline && storedStore.tagline !== 'Percetakan & Digital Printing Cepat Berkualitas') ? storedStore.tagline : DEFAULT_STORE_DATA.tagline,
+      alamat: (storedStore.alamat && !storedStore.alamat.includes('Sardjito')) ? storedStore.alamat : DEFAULT_STORE_DATA.alamat,
+      kontak: (storedStore.kontak && storedStore.kontak !== '081234567890') ? storedStore.kontak : DEFAULT_STORE_DATA.kontak,
+      rekening: (storedStore.rekening && !storedStore.rekening.includes('BCA 1234567890')) ? storedStore.rekening : DEFAULT_STORE_DATA.rekening,
+      spreadsheet_id: storedStore.spreadsheet_id || DEFAULT_STORE_DATA.spreadsheet_id,
+      wa_api_key: storedStore.wa_api_key || DEFAULT_STORE_DATA.wa_api_key,
+      wa_sender_number: (storedStore.wa_sender_number && storedStore.wa_sender_number !== '081234567890') ? storedStore.wa_sender_number : DEFAULT_STORE_DATA.wa_sender_number,
+      gas_web_app_url: storedStore.gas_web_app_url || '',
+      logo_url: storedStore.logo_url || DEFAULT_STORE_DATA.logo_url,
+      clients_slider: storedStore.clients_slider || DEFAULT_CLIENTS,
+      banners: storedStore.banners || DEFAULT_BANNERS
+    };
+
     // Ensure all arrays and nested objects are present
     return {
       users: loadedUsers,
       products: (parsed.products && parsed.products.length > 0) ? parsed.products : DEFAULT_PRODUCTS,
       orders: parsed.orders || DEFAULT_ORDERS,
       expenses: parsed.expenses || DEFAULT_EXPENSES,
-      storeData: {
-        ...DEFAULT_STORE_DATA,
-        ...(parsed.storeData || {}),
-        nama_toko: parsed.storeData?.nama_toko || DEFAULT_STORE_DATA.nama_toko,
-        tagline: parsed.storeData?.tagline || DEFAULT_STORE_DATA.tagline,
-        logo_url: parsed.storeData?.logo_url || DEFAULT_STORE_DATA.logo_url,
-        clients_slider: parsed.storeData?.clients_slider || DEFAULT_CLIENTS,
-        banners: parsed.storeData?.banners || DEFAULT_BANNERS
-      }
+      storeData: mergedStoreData
     };
   } catch (e) {
     console.error('Error loading stored data:', e);
