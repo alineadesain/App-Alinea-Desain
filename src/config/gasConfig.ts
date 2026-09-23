@@ -16,8 +16,10 @@ export const GAS_CONFIG = {
   WA_PROVIDER: 'fonnte',
   WA_SENDER_NUMBER: '085815950700',
 
-  // URL Deployment Web App Apps Script (Jika ada ENV atau default)
-  DEFAULT_WEB_APP_URL: ((import.meta as any).env?.VITE_GAS_URL as string) || ''
+  // URL Deployment Web App Apps Script Default Terpasang Permanen
+  DEFAULT_WEB_APP_URL:
+    ((import.meta as any).env?.VITE_GAS_URL as string) ||
+    'https://script.google.com/macros/s/AKfycby7KyaG5TOrNK_6QwPuhNMe-VW_7dGuluKehrY1L68fmOXpbLrLttO4Q85S-PmVAhf4/exec'
 };
 
 /**

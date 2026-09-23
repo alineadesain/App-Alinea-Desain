@@ -214,7 +214,7 @@ export default function App() {
             };
           });
 
-          const effectiveGas = s.storeData?.gas_web_app_url;
+          const effectiveGas = s.storeData?.gas_web_app_url || getActiveGasUrl();
           if (effectiveGas && effectiveGas.startsWith('http')) {
             fetchAllDataFromGas(effectiveGas).then((gasRes) => {
               if (isMounted && gasRes.success && gasRes.data) {

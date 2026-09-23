@@ -308,7 +308,7 @@ export const DEFAULT_STORE_DATA: StoreData = {
   clients_slider: DEFAULT_CLIENTS,
   banners: DEFAULT_BANNERS,
   spreadsheet_id: '1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc',
-  gas_web_app_url: '',
+  gas_web_app_url: 'https://script.google.com/macros/s/AKfycby7KyaG5TOrNK_6QwPuhNMe-VW_7dGuluKehrY1L68fmOXpbLrLttO4Q85S-PmVAhf4/exec',
   last_synced_at: '',
   wa_provider: 'fonnte',
   wa_api_key: '9JPQEQhViYsp7Q6njJQv',
@@ -392,7 +392,7 @@ export function loadStoredData(): AppStateData {
       spreadsheet_id: storedStore.spreadsheet_id || DEFAULT_STORE_DATA.spreadsheet_id,
       wa_api_key: storedStore.wa_api_key || DEFAULT_STORE_DATA.wa_api_key,
       wa_sender_number: (storedStore.wa_sender_number && storedStore.wa_sender_number !== '081234567890') ? storedStore.wa_sender_number : DEFAULT_STORE_DATA.wa_sender_number,
-      gas_web_app_url: storedStore.gas_web_app_url || '',
+      gas_web_app_url: (storedStore.gas_web_app_url && storedStore.gas_web_app_url.trim() !== '') ? storedStore.gas_web_app_url : DEFAULT_STORE_DATA.gas_web_app_url,
       logo_url: storedStore.logo_url || DEFAULT_STORE_DATA.logo_url,
       clients_slider: storedStore.clients_slider || DEFAULT_CLIENTS,
       banners: storedStore.banners || DEFAULT_BANNERS

@@ -14,7 +14,10 @@ const CONFIG = {
 
   // Konfigurasi Gateway WhatsApp (Fonnte, Fonte, Flowkirim, dll)
   WA_API_KEY: "9JPQEQhViYsp7Q6njJQv", 
-  WA_URL: "https://api.fonnte.com/send"
+  WA_URL: "https://api.fonnte.com/send",
+
+  // URL Deployment Web App Aktif (Terhubung ke aplikasi)
+  WEB_APP_URL: "https://script.google.com/macros/s/AKfycby7KyaG5TOrNK_6QwPuhNMe-VW_7dGuluKehrY1L68fmOXpbLrLttO4Q85S-PmVAhf4/exec"
 };
 
 // Kompatibilitas konstanta
