@@ -26,7 +26,7 @@ const WA_URL = CONFIG.WA_URL;
 
 // Helper sentral untuk menghubungkan ke Google Spreadsheet via SPREADSHEET_ID atau Active
 function getSpreadsheet() {
-  if (CONFIG.SPREADSHEET_ID && typeof CONFIG.SPREADSHEET_ID === 'string' && CONFIG.SPREADSHEET_ID.trim() !== "" && CONFIG.SPREADSHEET_ID !== "MASUKKAN_SPREADSHEET_ID_DISINI") {
+  if (CONFIG.SPREADSHEET_ID && typeof CONFIG.SPREADSHEET_ID === 'string' && CONFIG.SPREADSHEET_ID.trim() !== "" && CONFIG.SPREADSHEET_ID !== "1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc") {
     try {
       return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID.trim());
     } catch (err) {
@@ -989,7 +989,7 @@ function sendWA(phone, message) {
   try {
     const cfg = getWhatsAppConfig();
     const token = cfg.apiKey;
-    if (!token || token === "MASUKKAN_API_KEY_ANDA_DISINI") return;
+    if (!token || token === "1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc") return;
 
     let cleanPhone = String(phone).replace(/[^0-9]/g, '');
     if (cleanPhone.startsWith('0')) {
