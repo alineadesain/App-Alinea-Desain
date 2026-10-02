@@ -78,6 +78,14 @@ export interface Expense {
   NotaUrl?: string;
 }
 
+export interface BankAccount {
+  id: string;
+  bank: string;
+  nomor: string;
+  atasNama: string;
+  isPrimary?: boolean;
+}
+
 export interface ClientPartner {
   id: string;
   nama: string;
@@ -106,6 +114,7 @@ export interface StoreData {
   alamat: string;
   kontak: string;
   rekening: string;
+  bank_accounts?: BankAccount[];
   clients_slider: ClientPartner[];
   banners?: BannerSlide[];
   // Google Apps Script & Spreadsheet Integration

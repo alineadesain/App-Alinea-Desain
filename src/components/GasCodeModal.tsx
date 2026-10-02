@@ -32,14 +32,21 @@ const WA_API_KEY = CONFIG.WA_API_KEY;
 const WA_URL = CONFIG.WA_URL; 
 
 function getSpreadsheet() {
-  if (CONFIG.SPREADSHEET_ID && typeof CONFIG.SPREADSHEET_ID === 'string' && CONFIG.SPREADSHEET_ID.trim() !== "" && CONFIG.SPREADSHEET_ID !== "MASUKKAN_SPREADSHEET_ID_DISINI") {
+  var id = (CONFIG && CONFIG.SPREADSHEET_ID) ? String(CONFIG.SPREADSHEET_ID).trim() : "";
+  if (id && id !== "" && id.indexOf("MASUKKAN") === -1 && id.indexOf("CONTOH") === -1) {
     try {
-      return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID.trim());
+      return SpreadsheetApp.openById(id);
     } catch (err) {
-      Logger.log("Peringatan: Gagal membuka Spreadsheet ID: " + err.message + ". Menggunakan active spreadsheet.");
+      Logger.log("Peringatan: Gagal membuka Spreadsheet ID ('" + id + "'): " + err.message + ". Menggunakan active spreadsheet.");
     }
   }
-  return SpreadsheetApp.getActiveSpreadsheet();
+  try {
+    var active = SpreadsheetApp.getActiveSpreadsheet();
+    if (active) return active;
+  } catch (e) {
+    Logger.log("Active spreadsheet tidak tersedia: " + e.message);
+  }
+  throw new Error("Spreadsheet tidak dapat diakses! Pastikan SPREADSHEET_ID sudah diisi dengan ID spreadsheet Anda di CONFIG Code.gs.");
 }
 
 function doGet(e) {
@@ -73,7 +80,7 @@ function doPost(e) {
       result = fetchAllData();
     } else if (action === 'ping') {
       result = { status: 'ok', timestamp: new Date().toISOString(), message: 'Connected' };
-    } else if (action === 'addOrder') {
+    } else if (action === 'addOrder' || action === 'newOrder') {
       result = addOrder(data.order || data);
     } else if (action === 'updateOrderStatus') {
       result = updateOrderStatus(data.orderId, data.status, data.noCustomer, data.orderDetailText);
@@ -81,20 +88,22 @@ function doPost(e) {
       result = updateOrderBayar(data.orderId, data.statusBayar);
     } else if (action === 'deleteOrder') {
       result = deleteOrder(data.id || data.orderId);
-    } else if (action === 'registerCustomer' || action === 'addUser') {
+    } else if (action === 'registerCustomer' || action === 'addUser' || action === 'newCustomer') {
       result = registerCustomer(data.user || data);
-    } else if (action === 'addProduct') {
+    } else if (action === 'deleteUser') {
+      result = deleteUser(data.id || data.userId);
+    } else if (action === 'addProduct' || action === 'saveProduct') {
       result = addProduct(data.product || data);
     } else if (action === 'deleteProduct') {
       result = deleteProduct(data.id || data.productId);
-    } else if (action === 'addExpense') {
+    } else if (action === 'addExpense' || action === 'newExpense') {
       result = addExpense(data.expense || data);
     } else if (action === 'deleteExpense') {
       result = deleteExpense(data.id || data.expenseId);
-    } else if (action === 'saveAllStoreData') {
+    } else if (action === 'saveAllStoreData' || action === 'updateStoreData') {
       result = saveAllStoreData(data.storeData || data);
-    } else if (action === 'syncFullDatabase') {
-      result = syncFullDatabase(data.database || data);
+    } else if (action === 'syncFullDatabase' || action === 'pushAllDatabase') {
+      result = syncFullDatabase(data.database || data.fullData || data);
     }
 
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
@@ -109,6 +118,7 @@ function setupDatabase() {
     'Users': ['ID', 'Role', 'KodeKhusus', 'Nama', 'NoWA', 'Alamat', 'Password', 'Email', 'TglDaftar'],
     'Products': ['ID', 'Nama', 'Kategori', 'Harga', 'Deskripsi', 'Thumbnail', 'Terjual', 'HargaDesain', 'HargaCutting', 'HargaLaminating'],
     'Orders': ['ID', 'Tgl', 'KodeCustomer', 'NamaCustomer', 'NoCustomer', 'IDProduk', 'NamaProduk', 'Kategori', 'Qty', 'Panjang', 'Lebar', 'Finishing', 'JasaCutting', 'JasaLaminating', 'JasaDesain', 'TotalHarga', 'StatusBayar', 'StatusOrder', 'DP', 'Sisa Tagihan', 'Catatan'],
+    'OrderItems': ['IDOrder', 'Tanggal', 'NamaCustomer', 'NoCustomer', 'IDProduk', 'NamaProduk', 'Kategori', 'Qty', 'Panjang', 'Lebar', 'Finishing', 'Desain', 'Cutting', 'Laminating', 'Subtotal'],
     'Expenses': ['ID', 'Tgl', 'Total', 'Toko', 'Detail', 'NotaUrl'],
     'StoreData': ['Key', 'Value']
   };
@@ -193,6 +203,23 @@ function registerCustomer(data) {
   }
 }
 
+function deleteUser(userId) {
+  try {
+    const sheet = getSpreadsheet().getSheetByName('Users');
+    if (!sheet) return { success: false, message: 'Sheet Users tidak ditemukan' };
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(userId)) {
+        sheet.deleteRow(i + 1);
+        return { success: true, message: 'User berhasil dihapus dari spreadsheet' };
+      }
+    }
+    return { success: false, message: 'User tidak ditemukan' };
+  } catch (err) {
+    return { success: false, message: err.toString() };
+  }
+}
+
 function getSheetData(sheetName) {
   const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
@@ -214,10 +241,51 @@ function fetchAllData() {
     if (!ss.getSheetByName('Users') || !ss.getSheetByName('Orders')) {
       setupDatabase();
     }
+    const orders = getSheetData('Orders');
+    const orderItems = getSheetData('OrderItems');
+
+    // Hubungkan item rincian ke masing-masing order jika ada data di OrderItems
+    if (orderItems && orderItems.length > 0) {
+      const itemsByOrder = {};
+      orderItems.forEach(function(it) {
+        const oId = String(it.IDOrder || it.idorder || it.id || '');
+        if (oId) {
+          if (!itemsByOrder[oId]) itemsByOrder[oId] = [];
+          const itQty = Number(it.Qty || it.qty || 1);
+          const itSubtotal = Number(it.Subtotal || it.subtotal || 0);
+          const itHarga = itQty > 0 ? (itSubtotal / itQty) : itSubtotal;
+
+          itemsByOrder[oId].push({
+            id: (it.IDProduk || 'ITM') + '_' + itemsByOrder[oId].length,
+            productId: it.IDProduk || '-',
+            namaProduk: it.NamaProduk || 'Produk',
+            kategori: it.Kategori || 'satuan',
+            harga: itHarga,
+            qty: itQty,
+            panjang: Number(it.Panjang || 0),
+            lebar: Number(it.Lebar || 0),
+            finishing: it.Finishing || '-',
+            jasaDesain: Number(it.Desain || 0),
+            jasaCutting: Number(it.Cutting || 0),
+            jasaLaminating: Number(it.Laminating || 0),
+            subtotal: itSubtotal
+          });
+        }
+      });
+
+      orders.forEach(function(ord) {
+        const oId = String(ord.ID || '');
+        if (itemsByOrder[oId] && itemsByOrder[oId].length > 0) {
+          ord.Items = itemsByOrder[oId];
+        }
+      });
+    }
+
     return {
       users: getSheetData('Users'),
       products: getSheetData('Products'),
-      orders: getSheetData('Orders'),
+      orders: orders,
+      orderItems: orderItems,
       expenses: getSheetData('Expenses'),
       storeData: getSheetData('StoreData')
     };
@@ -242,13 +310,28 @@ function addOrder(data) {
     const kodeCustomer   = data.KodeCustomer || data.kodeCustomer || data.kode || '-';
     const namaCustomer   = data.NamaCustomer || data.namaCustomer || data.nama || 'Customer';
     const noCustomer     = data.NoCustomer || data.noCustomer || data.nowa || data.NoWA || '-';
-    const idProduk       = data.IDProduk || data.idProduk || '-';
-    const namaProduk     = data.NamaProduk || data.namaProduk || '-';
-    const kategori       = data.Kategori || data.kategori || 'satuan';
-    const qty            = Number(data.Qty || data.qty || 1);
-    const panjang        = Number(data.Panjang || data.panjang || 0);
-    const lebar          = Number(data.Lebar || data.lebar || 0);
-    const finishing      = data.Finishing || data.finishing || '-';
+    let idProduk         = data.IDProduk || data.idProduk || '-';
+    let namaProduk       = data.NamaProduk || data.namaProduk || '-';
+    let kategori         = data.Kategori || data.kategori || 'satuan';
+    let qty              = Number(data.Qty || data.qty || 1);
+    let panjang          = Number(data.Panjang || data.panjang || 0);
+    let lebar            = Number(data.Lebar || data.lebar || 0);
+    let finishing        = data.Finishing || data.finishing || '-';
+
+    // Jika order memiliki rincian multi-item (Items)
+    if (data.Items && Array.isArray(data.Items) && data.Items.length > 0) {
+      namaProduk = data.Items.map(function(it, idx) {
+        let spec = (idx + 1) + '. ' + (it.namaProduk || it.NamaProduk || 'Produk') + ' (' + (it.qty || 1) + 'x)';
+        if (it.kategori === 'meteran' && it.panjang && it.lebar) {
+          spec += ' ' + it.panjang + 'x' + it.lebar + 'cm';
+        }
+        return spec;
+      }).join('; ');
+      qty = data.Items.reduce(function(acc, it) { return acc + Number(it.qty || 1); }, 0);
+      idProduk = data.Items.length > 1 ? 'MULTI' : (data.Items[0].productId || data.Items[0].IDProduk || '-');
+      kategori = data.Items.length > 1 ? 'campuran' : (data.Items[0].kategori || 'satuan');
+    }
+
     const jasaCutting    = Number(data.JasaCutting || data.jasaCutting || 0);
     const jasaLaminating = Number(data.JasaLaminating || data.jasaLaminating || 0);
     const jasaDesain     = Number(data.JasaDesain || data.jasaDesain || 0);
@@ -327,6 +410,39 @@ function addOrder(data) {
 
     sheet.appendRow(rowToAppend);
 
+    // Simpan rincian masing-masing item ke Sheet OrderItems jika pesanan memiliki Items
+    try {
+      if (data.Items && Array.isArray(data.Items) && data.Items.length > 0) {
+        let itemSheet = ss.getSheetByName('OrderItems');
+        if (!itemSheet) {
+          itemSheet = ss.insertSheet('OrderItems');
+          itemSheet.appendRow(['IDOrder', 'Tanggal', 'NamaCustomer', 'NoCustomer', 'IDProduk', 'NamaProduk', 'Kategori', 'Qty', 'Panjang', 'Lebar', 'Finishing', 'Desain', 'Cutting', 'Laminating', 'Subtotal']);
+          itemSheet.getRange(1, 1, 1, 15).setFontWeight("bold").setBackground("#0d9488").setFontColor("#ffffff");
+        }
+        data.Items.forEach(function(it, idx) {
+          itemSheet.appendRow([
+            id,
+            tgl,
+            namaCustomer,
+            noCustomer,
+            it.productId || it.IDProduk || ('P-' + (idx + 1)),
+            it.namaProduk || it.NamaProduk || 'Produk',
+            it.kategori || 'satuan',
+            Number(it.qty || 1),
+            Number(it.panjang || 0),
+            Number(it.lebar || 0),
+            it.finishing || '-',
+            Number(it.jasaDesain || 0),
+            Number(it.jasaCutting || 0),
+            Number(it.jasaLaminating || 0),
+            Number(it.subtotal || 0)
+          ]);
+        });
+      }
+    } catch (itErr) {
+      Logger.log("Save OrderItems error: " + itErr.message);
+    }
+
     // Simpan customer baru otomatis ke Sheet Users jika belum terdaftar
     try {
       if (noCustomer && noCustomer !== '-' && namaCustomer && namaCustomer !== 'Customer') {
@@ -357,6 +473,35 @@ function addOrder(data) {
     }
 
     return { success: true, id: id };
+  } catch (err) {
+    return { success: false, message: err.toString() };
+  }
+}
+
+function deleteOrder(orderId) {
+  try {
+    const ss = getSpreadsheet();
+    const sheet = ss.getSheetByName('Orders');
+    if (sheet) {
+      const data = sheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === String(orderId)) {
+          sheet.deleteRow(i + 1);
+          break;
+        }
+      }
+    }
+    // Hapus juga rincian order di sheet OrderItems jika ada
+    const itemSheet = ss.getSheetByName('OrderItems');
+    if (itemSheet) {
+      const iData = itemSheet.getDataRange().getValues();
+      for (let i = iData.length - 1; i >= 1; i--) {
+        if (String(iData[i][0]) === String(orderId)) {
+          itemSheet.deleteRow(i + 1);
+        }
+      }
+    }
+    return { success: true };
   } catch (err) {
     return { success: false, message: err.toString() };
   }
@@ -495,6 +640,17 @@ function syncFullDatabase(data) {
             const dpVal = Number(ord.DP !== undefined && ord.DP !== null ? ord.DP : (ord.NominalDP || 0));
             const sisaVal = ord.SisaTagihan !== undefined && ord.SisaTagihan !== null ? Number(ord.SisaTagihan) : Math.max(0, tot - dpVal);
 
+            let prodSummary = ord.NamaProduk || '-';
+            if (ord.Items && Array.isArray(ord.Items) && ord.Items.length > 0) {
+              prodSummary = ord.Items.map(function(it, idx) {
+                let s = (idx + 1) + '. ' + (it.namaProduk || 'Produk') + ' (' + (it.qty || 1) + 'x)';
+                if (it.kategori === 'meteran' && it.panjang && it.lebar) {
+                  s += ' ' + it.panjang + 'x' + it.lebar + 'cm';
+                }
+                return s;
+              }).join('; ');
+            }
+
             const colMap = {
               'id': ord.ID,
               'tgl': ord.Tgl || new Date().toISOString(),
@@ -503,9 +659,9 @@ function syncFullDatabase(data) {
               'namacustomer': ord.NamaCustomer || 'Customer',
               'nocustomer': ord.NoCustomer || '-',
               'nowa': ord.NoCustomer || '-',
-              'idproduk': ord.IDProduk || '-',
-              'namaproduk': ord.NamaProduk || '-',
-              'kategori': ord.Kategori || 'satuan',
+              'idproduk': ord.IDProduk || (ord.Items && ord.Items.length > 1 ? 'MULTI' : '-'),
+              'namaproduk': prodSummary,
+              'kategori': ord.Kategori || (ord.Items && ord.Items.length > 1 ? 'campuran' : 'satuan'),
               'qty': Number(ord.Qty || 1),
               'jumlah': Number(ord.Qty || 1),
               'panjang': Number(ord.Panjang || 0),
@@ -533,6 +689,32 @@ function syncFullDatabase(data) {
 
             ordSheet.appendRow(row);
             existingIds[ordId] = true;
+
+            // Simpan rincian ke Sheet OrderItems jika ada
+            if (ord.Items && Array.isArray(ord.Items) && ord.Items.length > 0) {
+              let itemSheet = ss.getSheetByName('OrderItems');
+              if (itemSheet) {
+                ord.Items.forEach(function(it, idx) {
+                  itemSheet.appendRow([
+                    ord.ID,
+                    ord.Tgl || new Date().toISOString(),
+                    ord.NamaCustomer || 'Customer',
+                    ord.NoCustomer || '-',
+                    it.productId || it.IDProduk || ('P-' + (idx + 1)),
+                    it.namaProduk || it.NamaProduk || 'Produk',
+                    it.kategori || 'satuan',
+                    Number(it.qty || 1),
+                    Number(it.panjang || 0),
+                    Number(it.lebar || 0),
+                    it.finishing || '-',
+                    Number(it.jasaDesain || 0),
+                    Number(it.jasaCutting || 0),
+                    Number(it.jasaLaminating || 0),
+                    Number(it.subtotal || 0)
+                  ]);
+                });
+              }
+            }
           }
         });
       }

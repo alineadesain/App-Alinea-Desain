@@ -354,42 +354,49 @@ export async function syncGasUpdateOrderBayar(
  * Sinkronisasi Penghapusan Pesanan
  */
 export async function syncGasDeleteOrder(gasUrl: string | undefined, orderId: string): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'deleteOrder', { orderId });
+  return sendGasAction(gasUrl, 'deleteOrder', { orderId, id: orderId });
 }
 
 /**
  * Sinkronisasi Produk Baru / Edit Produk
  */
 export async function syncGasProduct(gasUrl: string | undefined, product: any): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'saveProduct', { product });
+  return sendGasAction(gasUrl, 'addProduct', { product });
 }
 
 /**
  * Sinkronisasi Hapus Produk
  */
 export async function syncGasDeleteProduct(gasUrl: string | undefined, productId: string): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'deleteProduct', { productId });
+  return sendGasAction(gasUrl, 'deleteProduct', { productId, id: productId });
 }
 
 /**
  * Sinkronisasi Customer Baru
  */
 export async function syncGasNewCustomer(gasUrl: string | undefined, user: any): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'newCustomer', { user });
+  return sendGasAction(gasUrl, 'registerCustomer', { user });
+}
+
+/**
+ * Sinkronisasi Hapus Customer
+ */
+export async function syncGasDeleteUser(gasUrl: string | undefined, userId: string): Promise<GasResponse> {
+  return sendGasAction(gasUrl, 'deleteUser', { userId, id: userId });
 }
 
 /**
  * Sinkronisasi Pengeluaran Baru
  */
 export async function syncGasExpense(gasUrl: string | undefined, expense: any): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'newExpense', { expense });
+  return sendGasAction(gasUrl, 'addExpense', { expense });
 }
 
 /**
  * Sinkronisasi Hapus Pengeluaran
  */
 export async function syncGasDeleteExpense(gasUrl: string | undefined, expenseId: string): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'deleteExpense', { expenseId });
+  return sendGasAction(gasUrl, 'deleteExpense', { expenseId, id: expenseId });
 }
 
 /**

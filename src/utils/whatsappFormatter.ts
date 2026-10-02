@@ -74,6 +74,7 @@ export function findCustomerPhone(order: Order, users?: User[]): string {
 export interface WhatsAppFormatOptions {
   storeName?: string;
   rekening?: string;
+  bank_accounts?: any[];
   alamat?: string;
   kontak?: string;
 }
@@ -87,6 +88,10 @@ function getStoreName(options?: WhatsAppFormatOptions | StoreData): string {
 
 function getRekening(options?: WhatsAppFormatOptions | StoreData): string {
   if (!options) return '';
+  if ('bank_accounts' in options && Array.isArray((options as any).bank_accounts) && (options as any).bank_accounts.length > 0) {
+    const list = (options as any).bank_accounts;
+    return list.map((b: any) => `• ${b.bank}: *${b.nomor}* (a.n ${b.atasNama})`).join('\n');
+  }
   if ('rekening' in options && options.rekening) return options.rekening;
   return '';
 }
@@ -128,41 +133,52 @@ export function formatOrderWhatsAppConfirmation(
   lines.push('');
 
   // 2. Rincian Order
-  lines.push(`📋 *RINCIAN ORDER:*`);
+  lines.push(`📋 *RINCIAN PRODUK PESANAN:*`);
   if (order.Items && order.Items.length > 0) {
     order.Items.forEach((item, idx) => {
-      lines.push(`${idx + 1}. *${item.namaProduk}* (${item.qty}x)`);
+      lines.push(`${idx + 1}. *${item.namaProduk}*`);
+      lines.push(`   • Qty: *${item.qty} pcs* (${formatRupiah(item.harga)}/item)`);
       if (item.kategori === 'meteran') {
-        lines.push(`   📐 Ukuran: ${item.panjang || 0} x ${item.lebar || 0} cm (${item.finishing || 'Simkel'})`);
+        const p = item.panjang || 0;
+        const l = item.lebar || 0;
+        const luas = Math.max(1, (p / 100) * (l / 100));
+        lines.push(`   • Ukuran: ${p} x ${l} cm (${luas.toFixed(2)} m²) • Finishing: ${item.finishing || 'Simkel'}`);
       }
       const jasaArr: string[] = [];
       if (item.withDesain && (item.jasaDesain || 0) > 0) {
-        jasaArr.push(`Desain: ${formatRupiah(item.jasaDesain!)}`);
+        jasaArr.push(`Desain: +${formatRupiah(item.jasaDesain!)}`);
       }
       if (item.withCutting && (item.jasaCutting || 0) > 0) {
-        jasaArr.push(`Cutting: ${formatRupiah(item.jasaCutting!)}`);
+        jasaArr.push(`Cutting: +${formatRupiah(item.jasaCutting!)}`);
       }
       if (item.withLaminating && (item.jasaLaminating || 0) > 0) {
-        jasaArr.push(`Laminasi: ${formatRupiah(item.jasaLaminating!)}`);
+        jasaArr.push(`Laminasi: +${formatRupiah(item.jasaLaminating!)}`);
       }
       if (jasaArr.length > 0) {
-        lines.push(`   ✨ Layanan: ${jasaArr.join(', ')}`);
+        lines.push(`   • Layanan: ${jasaArr.join(', ')}`);
       }
-      lines.push(`   💵 Subtotal: *${formatRupiah(item.subtotal)}*`);
+      lines.push(`   • Subtotal Produk: *${formatRupiah(item.subtotal)}*`);
+      lines.push('');
     });
   } else {
     // Single Product Order
-    lines.push(`• *${order.NamaProduk}* (${order.Qty}x)`);
+    lines.push(`1. *${order.NamaProduk}*`);
+    lines.push(`   • Qty: *${order.Qty} pcs*`);
     if (order.Kategori === 'meteran') {
-      lines.push(`  📐 Ukuran: ${order.Panjang || 0} x ${order.Lebar || 0} cm (${order.Finishing || 'Simkel'})`);
+      const p = order.Panjang || 0;
+      const l = order.Lebar || 0;
+      const luas = Math.max(1, (p / 100) * (l / 100));
+      lines.push(`   • Ukuran: ${p} x ${l} cm (${luas.toFixed(2)} m²) • Finishing: ${order.Finishing || 'Tanpa Finishing'}`);
     }
     const jasaArr: string[] = [];
-    if ((order.JasaDesain || 0) > 0) jasaArr.push(`Desain: ${formatRupiah(order.JasaDesain)}`);
-    if ((order.JasaCutting || 0) > 0) jasaArr.push(`Cutting: ${formatRupiah(order.JasaCutting)}`);
-    if ((order.JasaLaminating || 0) > 0) jasaArr.push(`Laminasi: ${formatRupiah(order.JasaLaminating)}`);
+    if ((order.JasaDesain || 0) > 0) jasaArr.push(`Desain: +${formatRupiah(order.JasaDesain)}`);
+    if ((order.JasaCutting || 0) > 0) jasaArr.push(`Cutting: +${formatRupiah(order.JasaCutting)}`);
+    if ((order.JasaLaminating || 0) > 0) jasaArr.push(`Laminasi: +${formatRupiah(order.JasaLaminating)}`);
     if (jasaArr.length > 0) {
-      lines.push(`  ✨ Layanan: ${jasaArr.join(', ')}`);
+      lines.push(`   • Layanan: ${jasaArr.join(', ')}`);
     }
+    lines.push(`   • Subtotal: *${formatRupiah(order.TotalHarga)}*`);
+    lines.push('');
   }
 
   if (order.Catatan) {

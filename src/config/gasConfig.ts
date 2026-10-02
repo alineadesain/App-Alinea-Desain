@@ -16,21 +16,23 @@ export const GAS_CONFIG = {
   WA_PROVIDER: 'fonnte',
   WA_SENDER_NUMBER: '085815950700',
 
-  // URL Deployment Web App Apps Script Default Terpasang Permanen
-  DEFAULT_WEB_APP_URL:
-    ((import.meta as any).env?.VITE_GAS_URL as string) ||
-    'https://script.google.com/macros/s/AKfycby7KyaG5TOrNK_6QwPuhNMe-VW_7dGuluKehrY1L68fmOXpbLrLttO4Q85S-PmVAhf4/exec'
+  // Fallback URL (opsional, jika disetel via variabel lingkungan)
+  DEFAULT_WEB_APP_URL: ((import.meta as any).env?.VITE_GAS_URL as string) || ''
 };
 
 /**
  * Mendapatkan URL Web App aktif untuk sinkronisasi.
- * Jika URL tidak disetel di storeData, otomatis menggunakan DEFAULT_WEB_APP_URL.
+ * Mengutamakan URL yang diinputkan secara manual oleh pengguna di Pengaturan Toko.
  */
 export function getActiveGasUrl(configuredUrl?: string): string {
-  if (configuredUrl && configuredUrl.trim().startsWith('http')) {
+  if (configuredUrl && typeof configuredUrl === 'string' && configuredUrl.trim().startsWith('http')) {
     return configuredUrl.trim();
   }
-  return GAS_CONFIG.DEFAULT_WEB_APP_URL;
+  const envUrl = (import.meta as any).env?.VITE_GAS_URL as string;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim().startsWith('http')) {
+    return envUrl.trim();
+  }
+  return (configuredUrl || '').trim();
 }
 
 /**

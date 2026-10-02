@@ -1,6 +1,17 @@
 {
   "users": [
     {
+      "ID": "U1790898921357",
+      "Role": "customer",
+      "KodeKhusus": "CUST-2352",
+      "Nama": "Percobaan ku",
+      "NoWA": "0895622909299",
+      "Alamat": "Teluk",
+      "Password": "cust123",
+      "Email": "percobaanku@gmail.com",
+      "TglDaftar": "2026-10-01T23:55:21.357Z"
+    },
+    {
       "ID": "U1",
       "Role": "admin",
       "KodeKhusus": "-",
@@ -32,21 +43,31 @@
       "Password": "cust123",
       "Email": "user5@gmail.com",
       "TglDaftar": "2026-09-16T11:01:00.207Z"
+    },
+    {
+      "ID": "C1790162654345",
+      "Role": "customer",
+      "KodeKhusus": 38147289,
+      "Nama": "Budi santoso",
+      "NoWA": "-",
+      "Alamat": "Customer Toko",
+      "Password": "budi12",
+      "Email": "budisantoso@customer.com",
+      "TglDaftar": "2026-09-23T11:24:16.283Z"
+    },
+    {
+      "ID": "C1790226058694",
+      "Role": "customer",
+      "KodeKhusus": 73266919,
+      "Nama": "User 1",
+      "NoWA": 858123123,
+      "Alamat": "klaten",
+      "Password": "cust123",
+      "Email": "user1@gmail.com",
+      "TglDaftar": "2026-09-24T05:00:58.694Z"
     }
   ],
   "products": [
-    {
-      "ID": "P1789359421532",
-      "Nama": "MMT",
-      "Kategori": "meteran",
-      "Harga": 21000,
-      "Deskripsi": "Toko atau tempat usaha kerasa kurang tanpa adanya MMT / spanduk didepannya. Alinea Desain siap menerima pesanan MMT untuk kebutuhan toko maupun event apapun",
-      "Thumbnail": "https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=400&auto=format&fit=crop&q=80",
-      "Terjual": 10,
-      "HargaDesain": 15000,
-      "HargaCutting": 0,
-      "HargaLaminating": 0
-    },
     {
       "ID": "P1789618156798",
       "Nama": "Sticker Cromo A3",
@@ -58,9 +79,191 @@
       "HargaDesain": 5000,
       "HargaCutting": 6000,
       "HargaLaminating": 5000
+    },
+    {
+      "ID": "P1789359421532",
+      "Nama": "MMT",
+      "Kategori": "meteran",
+      "Harga": 21000,
+      "Deskripsi": "Toko atau tempat usaha kerasa kurang tanpa adanya MMT / spanduk didepannya. Alinea Desain siap menerima pesanan MMT untuk kebutuhan toko maupun event apapun",
+      "Thumbnail": "https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 1,
+      "HargaDesain": 15000,
+      "HargaCutting": 0,
+      "HargaLaminating": 0
+    },
+    {
+      "ID": "P1790225719942",
+      "Nama": "Sticker Vynil A3",
+      "Kategori": "satuan",
+      "Harga": 15000,
+      "Deskripsi": "Sticker terbuat dari bahan plastik, jadi tidak mudah sobek",
+      "Thumbnail": "https://images.unsplash.com/photo-1572375992501-4b0892d50c69?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 1,
+      "HargaDesain": 10000,
+      "HargaCutting": 6000,
+      "HargaLaminating": 5000
+    },
+    {
+      "ID": "P1790237782905",
+      "Nama": "Customer Baru",
+      "Kategori": "satuan",
+      "Harga": 1000,
+      "Deskripsi": "Cetak satuan presisi siap kirim",
+      "Thumbnail": "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 0,
+      "HargaDesain": 0,
+      "HargaCutting": 0,
+      "HargaLaminating": 0
+    },
+    {
+      "ID": "P1790330699689",
+      "Nama": "Sticker A4 Chromo",
+      "Kategori": "satuan",
+      "Harga": 5000,
+      "Deskripsi": "Bahan dasar sticker chromo ini dari kertas, jadi lebih cocok buat label produk hemat hpp\n\n1 lembar bisa dapat beberapa pcs, tergantung besar kecil desain",
+      "Thumbnail": "https://images.unsplash.com/photo-1572375992501-4b0892d50c69?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 0,
+      "HargaDesain": 5000,
+      "HargaCutting": 3000,
+      "HargaLaminating": 4000
+    },
+    {
+      "ID": "P1790330811503",
+      "Nama": "Sticker A4 Vynil",
+      "Kategori": "satuan",
+      "Harga": 7500,
+      "Deskripsi": "Bahan dasar sticker ini dari plastik, jadi tidak gampang robek\nCocok buat sticker untuk media yg sering basah",
+      "Thumbnail": "https://images.unsplash.com/photo-1572375992501-4b0892d50c69?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 0,
+      "HargaDesain": 5000,
+      "HargaCutting": 3000,
+      "HargaLaminating": 4000
+    },
+    {
+      "ID": "P1790330905679",
+      "Nama": "Sticker A4 Hologram",
+      "Kategori": "satuan",
+      "Harga": 10000,
+      "Deskripsi": "Sticker ini spesial, karena memiliki efek pelangi saat memantulkan cahaya",
+      "Thumbnail": "https://images.unsplash.com/photo-1572375992501-4b0892d50c69?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 0,
+      "HargaDesain": 5000,
+      "HargaCutting": 3000,
+      "HargaLaminating": 4000
+    },
+    {
+      "ID": "P1790331178919",
+      "Nama": "Brosur A4 BB ap150 125 pcs",
+      "Kategori": "satuan",
+      "Harga": 390500,
+      "Deskripsi": "Bahan sedang dengan kertas Ap 150",
+      "Thumbnail": "https://images.unsplash.com/photo-1626785774573-4b799315345d?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 0,
+      "HargaDesain": 15000,
+      "HargaCutting": 0,
+      "HargaLaminating": 0
+    },
+    {
+      "ID": "P1790331269976",
+      "Nama": "Brosur A4 ap150",
+      "Kategori": "satuan",
+      "Harga": 300500,
+      "Deskripsi": "Brosur 1 sisi ukuran A4",
+      "Thumbnail": "https://images.unsplash.com/photo-1626785774573-4b799315345d?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 0,
+      "HargaDesain": 15000,
+      "HargaCutting": 0,
+      "HargaLaminating": 0
+    },
+    {
+      "ID": "P1790331539536",
+      "Nama": "Brosur A5 BB ap150 125pcs",
+      "Kategori": "satuan",
+      "Harga": 260500,
+      "Deskripsi": "Brosur dengan ukuran A5 (½A4) dengan 2 sisi",
+      "Thumbnail": "https://images.unsplash.com/photo-1626785774573-4b799315345d?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 0,
+      "HargaDesain": 15000,
+      "HargaCutting": 0,
+      "HargaLaminating": 0
+    },
+    {
+      "ID": "P1790331685634",
+      "Nama": "Brosur A5 ap150 125pcs",
+      "Kategori": "satuan",
+      "Harga": 200500,
+      "Deskripsi": "Brosur dengan ukuran A5 satu sisi\nCocok buat sebar brosur, karena ukurannya yang hemat",
+      "Thumbnail": "https://images.unsplash.com/photo-1626785774573-4b799315345d?w=400&auto=format&fit=crop&q=80",
+      "Terjual": 0,
+      "HargaDesain": 15000,
+      "HargaCutting": 0,
+      "HargaLaminating": 0
     }
   ],
   "orders": [
+    {
+      "ID": "ORD-953271",
+      "Tgl": "2026-10-01T23:57:42.627Z",
+      "KodeCustomer": "CUST-2352",
+      "NamaCustomer": "Percobaan ku",
+      "NoCustomer": "0895622909299",
+      "IDProduk": "P1790225719942",
+      "NamaProduk": "Sticker Vynil A3 (1x) + MMT (1x)",
+      "Kategori": "satuan",
+      "Qty": 2,
+      "Panjang": 0,
+      "Lebar": 0,
+      "Finishing": "-",
+      "JasaCutting": 6000,
+      "JasaLaminating": 5000,
+      "JasaDesain": 0,
+      "TotalHarga": 110000,
+      "NominalDP": 50000,
+      "DP": 50000,
+      "SisaTagihan": 60000,
+      "StatusBayar": "DP",
+      "StatusOrder": "Proses",
+      "Catatan": "Sticker 5 cm",
+      "Items": [
+        {
+          "id": "admin_item_1790898986921",
+          "productId": "P1790225719942",
+          "namaProduk": "Sticker Vynil A3",
+          "kategori": "satuan",
+          "harga": 15000,
+          "qty": 1,
+          "panjang": 0,
+          "lebar": 0,
+          "finishing": "-",
+          "withDesain": false,
+          "withCutting": true,
+          "withLaminating": true,
+          "jasaDesain": 0,
+          "jasaCutting": 6000,
+          "jasaLaminating": 5000,
+          "subtotal": 26000
+        },
+        {
+          "id": "admin_item_1790899004176_naia",
+          "productId": "P1789359421532",
+          "namaProduk": "MMT",
+          "kategori": "meteran",
+          "harga": 21000,
+          "qty": 1,
+          "panjang": 200,
+          "lebar": 200,
+          "finishing": "Simkel",
+          "withDesain": false,
+          "withCutting": false,
+          "withLaminating": false,
+          "jasaDesain": 0,
+          "jasaCutting": 0,
+          "jasaLaminating": 0,
+          "subtotal": 84000
+        }
+      ]
+    },
     {
       "ID": "ORD-403929",
       "Tgl": "2026-09-16T10:15:26.492Z",
@@ -79,9 +282,9 @@
       "JasaDesain": 15000,
       "TotalHarga": 246000,
       "StatusBayar": "DP",
-      "Status Order": "Order Masuk",
+      "Status Order": "Selesai",
       "DP": 50000,
-      "Sisa Tagihan": ""
+      "Catatan": 0
     },
     {
       "ID": "ORD-193962",
@@ -100,10 +303,98 @@
       "JasaLaminating": 0,
       "JasaDesain": 0,
       "TotalHarga": 42000,
-      "StatusBayar": "DP",
+      "StatusBayar": "Lunas",
       "Status Order": "Order Masuk",
       "DP": 10000,
-      "Sisa Tagihan": 32000
+      "Catatan": 0
+    },
+    {
+      "ID": "TEST-1790171370891",
+      "Tgl": "2026-09-23T13:49:30.891Z",
+      "KodeCustomer": "CUST-TEST",
+      "NamaCustomer": "Tes Pelanggan",
+      "NoCustomer": 81299998888,
+      "IDProduk": "-",
+      "NamaProduk": "Spanduk Flexi",
+      "Kategori": "meteran",
+      "Qty": 1,
+      "Panjang": 2,
+      "Lebar": 1,
+      "Finishing": "-",
+      "JasaCutting": 0,
+      "JasaLaminating": 0,
+      "JasaDesain": 0,
+      "TotalHarga": 50000,
+      "StatusBayar": "Lunas",
+      "Status Order": "Order Masuk",
+      "DP": 50000,
+      "Catatan": 0
+    },
+    {
+      "ID": "ORD-346081",
+      "Tgl": "2026-09-24T04:58:43.953Z",
+      "KodeCustomer": 25497040,
+      "NamaCustomer": "Percobaan",
+      "NoCustomer": 585123123,
+      "IDProduk": "P1789359421532",
+      "NamaProduk": "MMT",
+      "Kategori": "meteran",
+      "Qty": 1,
+      "Panjang": 150,
+      "Lebar": 150,
+      "Finishing": "Simkel",
+      "JasaCutting": 0,
+      "JasaLaminating": 0,
+      "JasaDesain": 15000,
+      "TotalHarga": 62250,
+      "StatusBayar": "Lunas",
+      "Status Order": "Order Masuk",
+      "DP": 10000,
+      "Catatan": 0
+    },
+    {
+      "ID": "ORD-837059",
+      "Tgl": "2026-09-24T05:00:58.695Z",
+      "KodeCustomer": 73266919,
+      "NamaCustomer": "User 1",
+      "NoCustomer": 858123123,
+      "IDProduk": "P1789359421532",
+      "NamaProduk": "MMT",
+      "Kategori": "meteran",
+      "Qty": 1,
+      "Panjang": 200,
+      "Lebar": 200,
+      "Finishing": "Simkel",
+      "JasaCutting": 0,
+      "JasaLaminating": 0,
+      "JasaDesain": 0,
+      "TotalHarga": 84000,
+      "StatusBayar": "Belum Lunas",
+      "Status Order": "Order Masuk",
+      "DP": 0,
+      "Catatan": 84000
+    },
+    {
+      "ID": "ORD-119701",
+      "Tgl": "2026-09-24T06:48:07.979Z",
+      "KodeCustomer": 25497040,
+      "NamaCustomer": "Percobaan",
+      "NoCustomer": 585123123,
+      "IDProduk": "P1790225719942",
+      "NamaProduk": "Sticker Vynil A3",
+      "Kategori": "satuan",
+      "Qty": 1,
+      "Panjang": 0,
+      "Lebar": 0,
+      "Finishing": "-",
+      "JasaCutting": 0,
+      "JasaLaminating": 0,
+      "JasaDesain": 10000,
+      "TotalHarga": 25000,
+      "StatusBayar": "Belum Lunas",
+      "Status Order": "Proses",
+      "DP": 0,
+      "Catatan": 25000
     }
   ],
   "expenses": [
@@ -113,6 +404,14 @@
       "Total": 20000,
       "Toko": "anugrah",
       "Detail": "pensil",
+      "NotaUrl": ""
+    },
+    {
+      "ID": "EXP-7660",
+      "Tgl": "2026-09-23T17:00:00.000Z",
+      "Total": 50000,
+      "Toko": "pom bensin",
+      "Detail": "bensin",
       "NotaUrl": ""
     }
   ],
@@ -145,6 +444,15 @@
     "alamat": "Jl K.A Perwito Teluk, RT.01/RW.03, Ngreden, Kec. Wonosari, Kabupaten Klaten, Jawa Tengah 57473",
     "kontak": "085815950700",
     "rekening": "CIMB Niaga 763568966600 a.n Muhammad Rosyid Ridlo",
+    "bank_accounts": [
+      {
+        "id": "b1",
+        "bank": "CIMB Niaga",
+        "nomor": "763568966600",
+        "atasNama": "Muhammad Rosyid Ridlo",
+        "isPrimary": true
+      }
+    ],
     "clients_slider": [
       {
         "id": "c1",
@@ -229,8 +537,8 @@
       }
     ],
     "spreadsheet_id": "1kxoXXgoB_eq1HiWbTbxZ1qzodvQs3ZdlAPqvzl5Jmqc",
-    "gas_web_app_url": "https://script.google.com/macros/s/AKfycby7KyaG5TOrNK_6QwPuhNMe-VW_7dGuluKehrY1L68fmOXpbLrLttO4Q85S-PmVAhf4/exec",
-    "last_synced_at": "2026-09-23T10:49:21.490Z",
+    "gas_web_app_url": "https://script.google.com/macros/s/AKfycbxi4ZmNyHyEY9yrrwwlpkIlgcKiIFEVB30cXc2GJbFNsYovT2LtEimj3iu325QaD8L0/exec",
+    "last_synced_at": "2026-10-01T23:45:56.835Z",
     "wa_provider": "fonnte",
     "wa_api_key": "9JPQEQhViYsp7Q6njJQv",
     "wa_api_url": "https://api.fonnte.com/send",

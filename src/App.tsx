@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   loadStoredData,
   saveStoredData,
@@ -19,11 +19,14 @@ import { AdminBannerManager } from './components/AdminBannerManager';
 import { AdminExpenseModal } from './components/AdminExpenseModal';
 import { GasCodeModal } from './components/GasCodeModal';
 import { AdminAddProductModal } from './components/AdminAddProductModal';
+import { AdminAddCustomerModal } from './components/AdminAddCustomerModal';
 import { AdminNewOrderModal } from './components/AdminNewOrderModal';
 import { LoginPortalModal } from './components/LoginPortalModal';
 import { AdminStoreBrandingManager } from './components/AdminStoreBrandingManager';
 import { AdminGasSyncManager } from './components/AdminGasSyncManager';
 import { AdminWhatsAppConfigManager } from './components/AdminWhatsAppConfigManager';
+import { AdminBankAccountsManager } from './components/AdminBankAccountsManager';
+import { AdminTopAnalytics } from './components/AdminTopAnalytics';
 import { getActiveGasUrl, isRunningInAppsScript, GAS_CONFIG } from './config/gasConfig';
 import {
   pushAllDatabaseToGas,
@@ -33,6 +36,7 @@ import {
   syncGasUpdateOrderBayar,
   syncGasDeleteOrder,
   syncGasNewCustomer,
+  syncGasDeleteUser,
   syncGasProduct,
   syncGasDeleteProduct,
   syncGasExpense,
@@ -92,7 +96,12 @@ import {
   LogIn,
   Shield,
   Building2,
-  Database
+  Database,
+  UserPlus,
+  MessageCircle,
+  RotateCcw,
+  Filter,
+  X
 } from 'lucide-react';
 
 export default function App() {
@@ -132,9 +141,17 @@ export default function App() {
   const [showSuccessToast, setShowSuccessToast] = useState<string | null>(null);
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
   const [showAdminNewOrderModal, setShowAdminNewOrderModal] = useState(false);
   const [showAdminExpenseModal, setShowAdminExpenseModal] = useState(false);
   const [adminTransaksiTab, setAdminTransaksiTab] = useState<'orders' | 'expenses'>('orders');
+
+  // Admin Transaksi Filters (Status Order, Status Bayar, Customer & Search)
+  const [adminOrderSearchTerm, setAdminOrderSearchTerm] = useState('');
+  const [adminOrderStatusFilter, setAdminOrderStatusFilter] = useState<'semua' | 'Order Masuk' | 'Proses' | 'Selesai'>('semua');
+  const [adminOrderBayarFilter, setAdminOrderBayarFilter] = useState<'semua' | 'Belum Lunas' | 'DP' | 'Lunas'>('semua');
+  const [adminOrderCustomerFilter, setAdminOrderCustomerFilter] = useState('semua');
 
   // Unified Login Portal State (Customer vs Admin selection, single active session)
   const [showLoginPortal, setShowLoginPortal] = useState(false);
@@ -696,6 +713,46 @@ export default function App() {
     }
   };
 
+  // Admin New Customer Handler (Tambah customer baru langsung dari menu Customer)
+  const handleSaveCustomer = (newCustomer: User) => {
+    setAppData((prev) => {
+      const nextUsers = [newCustomer, ...prev.users];
+      const nextState = { ...prev, users: nextUsers };
+      saveServerState(nextState);
+      return nextState;
+    });
+
+    // Otomatis sinkronkan customer baru ke Google Spreadsheet sheet Users
+    if (isGasAvailable()) {
+      syncGasNewCustomer(getGasUrl(), newCustomer)
+        .then((res) => console.log('Sync customer baru ke GAS:', res))
+        .catch((err) => console.warn('Gagal sync customer baru ke GAS:', err));
+    }
+
+    showToast(`Customer "${newCustomer.Nama}" berhasil ditambahkan dan disinkronkan ke Google Sheets!`);
+  };
+
+  // Admin Delete Customer Handler (Hapus customer dari menu Customer)
+  const handleDeleteCustomer = (userId: string, userName: string) => {
+    if (window.confirm(`Yakin ingin menghapus customer "${userName}"? Data customer di spreadsheet sheet Users juga akan terhapus.`)) {
+      setAppData((prev) => {
+        const nextUsers = prev.users.filter((u) => u.ID !== userId);
+        const nextState = { ...prev, users: nextUsers };
+        saveServerState(nextState);
+        return nextState;
+      });
+
+      // Otomatis sinkronkan hapus customer ke Google Spreadsheet sheet Users
+      if (isGasAvailable()) {
+        syncGasDeleteUser(getGasUrl(), userId)
+          .then((res) => console.log('Sync hapus customer ke GAS:', res))
+          .catch((err) => console.warn('Gagal sync hapus customer ke GAS:', err));
+      }
+
+      showToast(`Customer "${userName}" berhasil dihapus.`);
+    }
+  };
+
   // Admin New Order Handler (supports new customer creation or existing customer)
   const handleSaveAdminOrder = (order: Order, newCustomer?: User) => {
     // Pastikan nilai SisaTagihan selalu terhitung akurat
@@ -1062,6 +1119,61 @@ export default function App() {
   const totalPengeluaran = appData.expenses.reduce((sum, e) => sum + (e.Total || 0), 0);
   const saldoBersih = totalPemasukan - totalPengeluaran;
 
+  // Daftar customer untuk filter transaksi
+  const customerListForFilter = useMemo(() => {
+    const map = new Map<string, { key: string; nama: string; kode: string; count: number }>();
+    appData.orders.forEach((ord) => {
+      const key = ord.KodeCustomer && ord.KodeCustomer !== '-'
+        ? ord.KodeCustomer
+        : (ord.NoCustomer && ord.NoCustomer !== '-' ? ord.NoCustomer : ord.NamaCustomer);
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          nama: ord.NamaCustomer,
+          kode: ord.KodeCustomer || '-',
+          count: 0
+        });
+      }
+      map.get(key)!.count += 1;
+    });
+    return Array.from(map.values()).sort((a, b) => a.nama.localeCompare(b.nama));
+  }, [appData.orders]);
+
+  // Filtered orders untuk tab Transaksi admin
+  const filteredAdminOrders = useMemo(() => {
+    return appData.orders.filter((ord) => {
+      // Filter status order
+      if (adminOrderStatusFilter !== 'semua' && ord.StatusOrder !== adminOrderStatusFilter) {
+        return false;
+      }
+      // Filter status bayar
+      if (adminOrderBayarFilter !== 'semua' && ord.StatusBayar !== adminOrderBayarFilter) {
+        return false;
+      }
+      // Filter customer dropdown
+      if (adminOrderCustomerFilter !== 'semua') {
+        const matchKey = (ord.KodeCustomer === adminOrderCustomerFilter) ||
+          (ord.NoCustomer === adminOrderCustomerFilter) ||
+          (ord.NamaCustomer === adminOrderCustomerFilter);
+        if (!matchKey) return false;
+      }
+      // Filter kata kunci pencarian
+      if (adminOrderSearchTerm.trim()) {
+        const q = adminOrderSearchTerm.toLowerCase().trim();
+        const inId = ord.ID.toLowerCase().includes(q);
+        const inCustomer = ord.NamaCustomer.toLowerCase().includes(q) || (ord.KodeCustomer && ord.KodeCustomer.toLowerCase().includes(q));
+        const inPhone = ord.NoCustomer && ord.NoCustomer.includes(q);
+        const inProduct = ord.NamaProduk.toLowerCase().includes(q);
+        const inCatatan = ord.Catatan && ord.Catatan.toLowerCase().includes(q);
+        const inItems = ord.Items && ord.Items.some((it) => it.namaProduk.toLowerCase().includes(q));
+        if (!inId && !inCustomer && !inPhone && !inProduct && !inCatatan && !inItems) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [appData.orders, adminOrderStatusFilter, adminOrderBayarFilter, adminOrderCustomerFilter, adminOrderSearchTerm]);
+
   // Filtered products
   const displayedProducts = appData.products.filter((p) => {
     const matchSearch = p.Nama.toLowerCase().includes(productSearch.toLowerCase()) ||
@@ -1295,11 +1407,19 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-slate-300">
-                      <CreditCard className="w-4 h-4 text-teal-500 flex-shrink-0" />
-                      <span className="text-[11px] font-mono">
-                        {appData.storeData.rekening}
-                      </span>
+                    <div className="flex items-start gap-2 text-slate-300">
+                      <CreditCard className="w-4 h-4 text-teal-500 shrink-0 mt-0.5" />
+                      <div className="text-[11px] font-mono space-y-0.5">
+                        {appData.storeData.bank_accounts && appData.storeData.bank_accounts.length > 0 ? (
+                          appData.storeData.bank_accounts.map((b) => (
+                            <div key={b.id}>
+                              {b.bank}: {b.nomor} (a.n {b.atasNama}) {b.isPrimary ? '★' : ''}
+                            </div>
+                          ))
+                        ) : (
+                          <span>{appData.storeData.rekening}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2204,40 +2324,16 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Analisis Performa */}
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
-                    <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400">
-                      Analisis Performa Penjualan
-                    </h3>
-
-                    <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">
-                          Produk Terlaris
-                        </span>
-                        <span className="font-bold text-slate-800">
-                          {appData.products.sort((a, b) => b.Terjual - a.Terjual)[0]?.Nama}
-                        </span>
-                      </div>
-                      <span className="font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-200">
-                        {appData.products.sort((a, b) => b.Terjual - a.Terjual)[0]?.Terjual} terjual
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-400 font-semibold block">
-                          Customer Paling Sering Order
-                        </span>
-                        <span className="font-bold text-slate-800">
-                          Budi Santoso (88392011)
-                        </span>
-                      </div>
-                      <span className="font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded border border-teal-200">
-                        Loyal Customer
-                      </span>
-                    </div>
-                  </div>
+                  {/* Analisis Peringkat Top 5 Produk & Top 5 Customer */}
+                  <AdminTopAnalytics
+                    orders={filteredOrders}
+                    allOrders={appData.orders}
+                    products={appData.products}
+                    users={appData.users}
+                    hasDateFilter={!!(filterStartDate || filterEndDate)}
+                    filterStartDate={filterStartDate}
+                    filterEndDate={filterEndDate}
+                  />
                 </div>
               )}
 
@@ -2298,12 +2394,167 @@ export default function App() {
                   {/* Tab Content: ORDERS */}
                   {adminTransaksiTab === 'orders' && (
                     <div className="space-y-3">
-                      {appData.orders.length === 0 ? (
-                        <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-200 text-xs text-slate-400">
-                          Belum ada pesanan masuk.
+                      {/* FILTER PANEL TRANSAKSI */}
+                      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 text-xs">
+                        {/* Search Bar + Customer Dropdown */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {/* Pencarian Text */}
+                          <div className="relative">
+                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              value={adminOrderSearchTerm}
+                              onChange={(e) => setAdminOrderSearchTerm(e.target.value)}
+                              placeholder="Cari ID, customer, produk, no WA..."
+                              className="w-full pl-8 pr-7 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                            />
+                            {adminOrderSearchTerm && (
+                              <button
+                                type="button"
+                                onClick={() => setAdminOrderSearchTerm('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Dropdown Customer Selector */}
+                          <div className="relative">
+                            <select
+                              value={adminOrderCustomerFilter}
+                              onChange={(e) => setAdminOrderCustomerFilter(e.target.value)}
+                              className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                            >
+                              <option value="semua">Semua Customer ({customerListForFilter.length})</option>
+                              {customerListForFilter.map((c) => (
+                                <option key={c.key} value={c.key}>
+                                  {c.nama} {c.kode && c.kode !== '-' ? `(${c.kode})` : ''} - {c.count} pesanan
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Filter Chips Bar (Status Order & Status Bayar) */}
+                        <div className="space-y-2 pt-1 border-t border-slate-100">
+                          {/* Status Order Chips */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                              Status Order:
+                            </span>
+                            {(['semua', 'Order Masuk', 'Proses', 'Selesai'] as const).map((st) => {
+                              const count = st === 'semua'
+                                ? appData.orders.length
+                                : appData.orders.filter((o) => o.StatusOrder === st).length;
+                              const isActive = adminOrderStatusFilter === st;
+
+                              return (
+                                <button
+                                  key={st}
+                                  type="button"
+                                  onClick={() => setAdminOrderStatusFilter(st)}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                    isActive
+                                      ? 'bg-teal-700 text-white shadow-2xs'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  <span>{st === 'semua' ? 'Semua' : st}</span>
+                                  <span className={`text-[10px] px-1 rounded-full ${isActive ? 'bg-teal-800 text-teal-100' : 'bg-slate-200 text-slate-500'}`}>
+                                    {count}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Status Bayar Chips */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                              Status Bayar:
+                            </span>
+                            {(['semua', 'Belum Lunas', 'DP', 'Lunas'] as const).map((sb) => {
+                              const count = sb === 'semua'
+                                ? appData.orders.length
+                                : appData.orders.filter((o) => o.StatusBayar === sb).length;
+                              const isActive = adminOrderBayarFilter === sb;
+
+                              return (
+                                <button
+                                  key={sb}
+                                  type="button"
+                                  onClick={() => setAdminOrderBayarFilter(sb)}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                    isActive
+                                      ? sb === 'Lunas'
+                                        ? 'bg-emerald-700 text-white shadow-2xs'
+                                        : sb === 'DP'
+                                        ? 'bg-amber-600 text-white shadow-2xs'
+                                        : 'bg-rose-700 text-white shadow-2xs'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  <span>{sb === 'semua' ? 'Semua' : sb}</span>
+                                  <span className={`text-[10px] px-1 rounded-full ${isActive ? 'bg-black/20 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                                    {count}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Filter Active Indicator & Reset Button */}
+                        {(adminOrderStatusFilter !== 'semua' ||
+                          adminOrderBayarFilter !== 'semua' ||
+                          adminOrderCustomerFilter !== 'semua' ||
+                          adminOrderSearchTerm.trim()) && (
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
+                            <span className="text-slate-500">
+                              Menampilkan <strong>{filteredAdminOrders.length}</strong> dari {appData.orders.length} pesanan
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminOrderStatusFilter('semua');
+                                setAdminOrderBayarFilter('semua');
+                                setAdminOrderCustomerFilter('semua');
+                                setAdminOrderSearchTerm('');
+                              }}
+                              className="text-rose-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Reset Filter</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* DAFTAR PESANAN HASIL FILTER */}
+                      {filteredAdminOrders.length === 0 ? (
+                        <div className="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-200 text-xs text-slate-400 space-y-2">
+                          <p>Tidak ada pesanan yang sesuai dengan filter pencarian.</p>
+                          {(adminOrderStatusFilter !== 'semua' ||
+                            adminOrderBayarFilter !== 'semua' ||
+                            adminOrderCustomerFilter !== 'semua' ||
+                            adminOrderSearchTerm.trim()) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAdminOrderStatusFilter('semua');
+                                setAdminOrderBayarFilter('semua');
+                                setAdminOrderCustomerFilter('semua');
+                                setAdminOrderSearchTerm('');
+                              }}
+                              className="text-teal-700 font-bold hover:underline"
+                            >
+                              Tampilkan Semua Pesanan
+                            </button>
+                          )}
                         </div>
                       ) : (
-                        appData.orders.map((ord) => {
+                        filteredAdminOrders.map((ord) => {
                           const sisaTagihan =
                             ord.NominalDP && ord.NominalDP > 0
                               ? Math.max(0, ord.TotalHarga - ord.NominalDP)
@@ -2324,9 +2575,22 @@ export default function App() {
                                   <h4 className="font-bold text-xs text-slate-800 mt-0.5">
                                     {ord.NamaCustomer} ({ord.KodeCustomer})
                                   </h4>
-                                  <p className="text-[11px] text-slate-600 font-medium">
-                                    {ord.NamaProduk} ({ord.Qty} pcs)
-                                  </p>
+
+                                  {/* Rincian item produk (mendukung multi-item) */}
+                                  {ord.Items && ord.Items.length > 1 ? (
+                                    <div className="mt-1 space-y-0.5">
+                                      <span className="text-[10px] bg-teal-100/80 text-teal-800 font-bold px-1.5 py-0.5 rounded mr-1.5 inline-block">
+                                        📦 {ord.Items.length} Produk
+                                      </span>
+                                      <p className="text-[11px] text-slate-600 font-medium">
+                                        {ord.Items.map((it) => `${it.namaProduk} (${it.qty}x)`).join(', ')}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <p className="text-[11px] text-slate-600 font-medium">
+                                      {ord.NamaProduk} ({ord.Qty} pcs)
+                                    </p>
+                                  )}
                                 </div>
 
                                 <div className="text-right">
@@ -2481,38 +2745,111 @@ export default function App() {
               {/* 3. CUSTOMER DATA */}
               {activeAdminMenu === 'customer' && (
                 <div className="p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-bold text-sm text-slate-800">
-                      Data Customer Terdaftar ({appData.users.filter((u) => u.Role === 'customer').length})
-                    </h2>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div>
+                      <h2 className="font-bold text-sm text-slate-800">
+                        Data Customer Terdaftar ({appData.users.filter((u) => u.Role === 'customer').length})
+                      </h2>
+                      <p className="text-[11px] text-slate-500">
+                        Kelola data pelanggan, tambah customer baru, dan hubungkan otomatis ke Google Sheets
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCustomerModal(true)}
+                      className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition shadow-xs self-start sm:self-center cursor-pointer"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Tambah Customer</span>
+                    </button>
+                  </div>
+
+                  {/* Pencarian Customer */}
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      placeholder="Cari nama customer, nomor WhatsApp, atau ID khusus..."
+                      className="w-full text-xs pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none shadow-2xs"
+                    />
                   </div>
 
                   <div className="space-y-2">
                     {appData.users
                       .filter((u) => u.Role === 'customer')
+                      .filter((u) => {
+                        if (!customerSearch.trim()) return true;
+                        const q = customerSearch.toLowerCase();
+                        return (
+                          u.Nama.toLowerCase().includes(q) ||
+                          (u.NoWA && u.NoWA.includes(q)) ||
+                          (u.KodeKhusus && u.KodeKhusus.toLowerCase().includes(q)) ||
+                          (u.Alamat && u.Alamat.toLowerCase().includes(q))
+                        );
+                      })
                       .map((u) => {
                         const countOrders = appData.orders.filter(
                           (o) => String(o.KodeCustomer) === String(u.KodeKhusus)
                         ).length;
+
+                        const cleanPhone = cleanWhatsAppPhone(u.NoWA);
+
                         return (
                           <div
                             key={u.ID}
-                            className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1.5 text-xs"
+                            className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-2 text-xs"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-bold text-slate-800">{u.Nama}</span>
-                              <span className="font-mono text-teal-700 bg-teal-50 px-2 py-0.5 rounded font-bold">
+                              <div className="flex items-center gap-2">
+                                <span className="w-8 h-8 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 font-black text-xs flex items-center justify-center">
+                                  {u.Nama.slice(0, 1).toUpperCase()}
+                                </span>
+                                <div>
+                                  <span className="font-bold text-slate-800 text-xs block">{u.Nama}</span>
+                                  {u.Email && <span className="text-[10px] text-slate-400 block">{u.Email}</span>}
+                                </div>
+                              </div>
+                              <span className="font-mono text-teal-700 bg-teal-50 px-2 py-0.5 rounded font-bold text-[11px]">
                                 {u.KodeKhusus}
                               </span>
                             </div>
-                            <div className="text-slate-500 text-[11px]">
-                              WA: {u.NoWA} • Alamat: {u.Alamat}
+
+                            <div className="text-slate-600 text-[11px] space-y-0.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                              <div><strong>WhatsApp:</strong> <span className="font-mono">{u.NoWA}</span></div>
+                              <div><strong>Alamat:</strong> {u.Alamat}</div>
+                              <div><strong>Password Akun:</strong> <span className="font-mono">{u.Password}</span></div>
                             </div>
-                            <div className="flex justify-between items-center pt-1 text-[11px] text-slate-400">
-                              <span>Password: {u.Password}</span>
-                              <span className="font-bold text-teal-700">
+
+                            <div className="flex justify-between items-center pt-1 text-[11px] border-t border-slate-100">
+                              <span className="font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-100">
                                 {countOrders} Transaksi
                               </span>
+
+                              <div className="flex items-center gap-1.5">
+                                {cleanPhone && (
+                                  <a
+                                    href={`https://wa.me/${cleanPhone}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[11px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1 font-bold transition"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                    <span>Chat WA</span>
+                                  </a>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCustomer(u.ID, u.Nama)}
+                                  className="text-[11px] text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 p-1.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                                  title="Hapus Customer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -2621,15 +2958,26 @@ export default function App() {
               {activeAdminMenu === 'toko' && (
                 <div className="p-4 space-y-4">
                   {/* HEADER MENU TOKO */}
-                  <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center justify-between">
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5">
                       <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 shrink-0">
                         <Store className="w-5 h-5" />
                       </div>
                       <div>
                         <h2 className="font-bold text-sm text-slate-800">Manajemen Toko & Outlet</h2>
-                        <p className="text-[11px] text-slate-500">Kelola identitas, info kontak, tampilan beranda, dan integrasi sistem</p>
+                        <p className="text-[11px] text-slate-500">Kelola identitas toko, sinkronisasi Google Sheets manual, tampilan, dan WhatsApp</p>
                       </div>
+                    </div>
+
+                    {/* Quick Jump Bar */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <a
+                        href="#section-spreadsheet-sync"
+                        className="text-[11px] font-bold bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-xl transition flex items-center gap-1 shadow-2xs"
+                      >
+                        <Database className="w-3.5 h-3.5" />
+                        <span>Input Web App URL</span>
+                      </a>
                     </div>
                   </div>
 
@@ -2637,6 +2985,21 @@ export default function App() {
                   <AdminStoreBrandingManager
                     storeData={appData.storeData}
                     onSaveBranding={handleSaveBranding}
+                  />
+
+                  {/* 2. INTEGRASI GOOGLE SHEETS (INPUT MANUAL WEB APP URL) */}
+                  <AdminGasSyncManager
+                    storeData={appData.storeData}
+                    onUpdateStoreData={handleUpdateStoreDataPartial}
+                    onOpenGasModal={() => setShowGasModal(true)}
+                    onTriggerSyncNow={handleTriggerGasSyncNow}
+                    onPushAllToGas={handlePushAllDatabaseToGas}
+                    counts={{
+                      users: appData.users.length,
+                      products: appData.products.length,
+                      orders: appData.orders.length,
+                      expenses: appData.expenses.length
+                    }}
                   />
 
                   {/* 2. PENGATURAN INFORMASI OUTLET & KONTAK */}
@@ -2682,32 +3045,28 @@ export default function App() {
                       />
                     </div>
 
-                    <div>
-                      <label className="font-bold text-slate-600 block mb-1">
-                        Rekening Bank Toko (BCA / Mandiri / BRI)
-                      </label>
-                      <input
-                        type="text"
-                        value={appData.storeData.rekening}
-                        onChange={(e) =>
-                          setAppData((prev) => ({
-                            ...prev,
-                            storeData: { ...prev.storeData, rekening: e.target.value }
-                          }))
-                        }
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:ring-2 focus:ring-teal-500 focus:outline-none"
-                        placeholder="BCA 1234567890 a/n Alinea Percetakan"
-                      />
-                    </div>
-
                     <button
-                      onClick={() => showToast('Pengaturan informasi toko berhasil disimpan!')}
+                      type="button"
+                      onClick={() => {
+                        handleUpdateStoreDataPartial({
+                          alamat: appData.storeData.alamat,
+                          kontak: appData.storeData.kontak
+                        });
+                        showToast('Pengaturan alamat & kontak toko berhasil disimpan!');
+                      }}
                       className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl text-xs transition shadow-xs flex items-center justify-center gap-1.5"
                     >
                       <Check className="w-3.5 h-3.5" />
-                      <span>Simpan Informasi Toko</span>
+                      <span>Simpan Alamat & Kontak Toko</span>
                     </button>
                   </div>
+
+                  {/* 4. PENGATURAN REKENING BANK & E-WALLET TOKO (DAPAT DITAMBAH BEBERAPA REKENING) */}
+                  <AdminBankAccountsManager
+                    storeData={appData.storeData}
+                    onUpdateStoreDataPartial={handleUpdateStoreDataPartial}
+                    showToast={showToast}
+                  />
 
                   {/* 3. PENGATURAN RUNNING TEXT & KECEPATAN */}
                   <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3 text-xs">
@@ -2900,42 +3259,9 @@ export default function App() {
                   </div>
 
                   {/* ======================================================== */}
-                  {/* 7. INTEGRASI SISTEM & DATABASE EKSTERNAL (DI PALING BAWAH) */}
+                  {/* 7. INTEGRASI GATEWAY WHATSAPP (FONNTE / FONTE / DSB) */}
                   {/* ======================================================== */}
                   <div className="pt-4 border-t-2 border-dashed border-slate-200 space-y-4">
-                    <div className="bg-slate-900 text-white p-4 rounded-2xl shadow-md flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] font-mono tracking-wider uppercase text-teal-400 font-bold block">
-                          Backend & Otomatisasi
-                        </span>
-                        <h3 className="font-extrabold text-sm text-white flex items-center gap-2 mt-0.5">
-                          <Database className="w-4 h-4 text-teal-400" />
-                          <span>Integrasi Terpusat Google Sheets & WhatsApp (Code.gs)</span>
-                        </h3>
-                        <p className="text-[11px] text-slate-300 mt-0.5">
-                          Konfigurasi database & WhatsApp gateway terpusat di Code.gs. Semua pengguna otomatis terhubung.
-                        </p>
-                      </div>
-                      <span className="bg-teal-500/20 text-teal-300 text-[10px] font-bold px-2.5 py-1 rounded-lg border border-teal-500/30">
-                        Integrasi
-                      </span>
-                    </div>
-
-                    {/* INTEGRASI WEB APP URL GOOGLE SHEETS & SYNC NOW */}
-                    <AdminGasSyncManager
-                      storeData={appData.storeData}
-                      onUpdateStoreData={handleUpdateStoreDataPartial}
-                      onOpenGasModal={() => setShowGasModal(true)}
-                      onTriggerSyncNow={handleTriggerGasSyncNow}
-                      onPushAllToGas={handlePushAllDatabaseToGas}
-                      counts={{
-                        users: appData.users.length,
-                        products: appData.products.length,
-                        orders: appData.orders.length,
-                        expenses: appData.expenses.length
-                      }}
-                    />
-
                     {/* KONFIGURASI API WHATSAPP (FONNTE / FONTE / FLOWKIRIM / DSB) */}
                     <AdminWhatsAppConfigManager
                       storeData={appData.storeData}
@@ -3155,11 +3481,13 @@ export default function App() {
           )}
         </nav>
 
-        {/* Modal Detail Pesanan Customer */}
+        {/* Modal Detail Pesanan Customer & Admin */}
         <OrderDetailModal
           order={selectedOrderForDetail}
           storeData={appData.storeData}
           onClose={() => setSelectedOrderForDetail(null)}
+          users={appData.users}
+          userRole={currentRole}
         />
 
         {/* Modal Product Quick Detail */}
@@ -3232,6 +3560,14 @@ export default function App() {
           }}
           onSave={handleSaveProduct}
           initialProduct={productToEdit}
+        />
+
+        {/* Modal Tambah Customer Admin */}
+        <AdminAddCustomerModal
+          isOpen={showAddCustomerModal}
+          onClose={() => setShowAddCustomerModal(false)}
+          onSaveCustomer={handleSaveCustomer}
+          existingUsers={appData.users}
         />
 
         {/* Modal Order Baru Admin (Pilih Customer / Tambah Customer Baru) */}
