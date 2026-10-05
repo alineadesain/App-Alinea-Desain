@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   Printer,
@@ -6,22 +6,19 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  Package,
-  Layers,
-  Ruler,
-  Scissors,
-  Palette,
   CreditCard,
   Copy,
-  Check
+  Check,
+  ChevronRight
 } from 'lucide-react';
-import { Order, StoreData, User } from '../types';
+import { Order, StoreData, User, BankAccount, OrderItem } from '../types';
 import {
   findCustomerPhone,
   cleanWhatsAppPhone,
   formatOrderWhatsAppConfirmation,
   formatCustomerToAdminWhatsAppConfirmation,
-  createWhatsAppUrl
+  createWhatsAppUrl,
+  getOrderDisplayItems
 } from '../utils/whatsappFormatter';
 
 interface OrderDetailModalProps {
@@ -29,6 +26,7 @@ interface OrderDetailModalProps {
   storeData: StoreData;
   onClose: () => void;
   users?: User[];
+  orderItems?: any[];
   userRole?: 'admin' | 'customer';
 }
 
@@ -37,19 +35,49 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   storeData,
   onClose,
   users = [],
+  orderItems = [],
   userRole = 'customer'
 }) => {
   const [copiedRekening, setCopiedRekening] = useState(false);
+  const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
+
+  // Normalisasi bank accounts toko agar selalu array aman
+  const normalizedBankAccounts: BankAccount[] = useMemo(() => {
+    if (!storeData?.bank_accounts) return [];
+    if (Array.isArray(storeData.bank_accounts)) return storeData.bank_accounts;
+    if (typeof storeData.bank_accounts === 'string') {
+      try {
+        const parsed = JSON.parse(storeData.bank_accounts);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }, [storeData?.bank_accounts]);
+
+  // Ekstrak rincian produk (baik dari order.Items, sheet OrderItems, maupun sheet Orders)
+  const displayItems: OrderItem[] = useMemo(() => {
+    if (!order) return [];
+    try {
+      return getOrderDisplayItems(order, orderItems);
+    } catch (e) {
+      console.error('Error getting display items:', e);
+      return [];
+    }
+  }, [order, orderItems]);
 
   if (!order) return null;
 
-  const formatRp = (num: number) => {
-    return 'Rp ' + (num || 0).toLocaleString('id-ID');
+  const formatRp = (num: any) => {
+    return 'Rp ' + Math.round(Number(num) || 0).toLocaleString('id-ID');
   };
 
-  const formatDate = (isoString: string) => {
+  const formatDate = (isoString?: string) => {
+    if (!isoString) return '-';
     try {
       const d = new Date(isoString);
+      if (isNaN(d.getTime())) return String(isoString);
       return d.toLocaleDateString('id-ID', {
         weekday: 'long',
         year: 'numeric',
@@ -59,7 +87,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         minute: '2-digit'
       });
     } catch {
-      return isoString;
+      return String(isoString);
     }
   };
 
@@ -109,12 +137,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
   };
 
-  const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
-
   const handleCopyRekening = (textToCopy?: string, bankId?: string) => {
     const text = textToCopy || storeData.rekening;
     if (text) {
-      navigator.clipboard.writeText(text);
+      navigator.clipboard.writeText(String(text));
       if (bankId) {
         setCopiedBankId(bankId);
         setTimeout(() => setCopiedBankId(null), 2000);
@@ -125,11 +151,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
   };
 
-  const dpAmount = order.NominalDP || order.DP || 0;
+  const dpAmount = Number(order.NominalDP || order.DP || 0);
+  const totalAmount = Number(order.TotalHarga || 0);
   const sisaTagihan =
     order.SisaTagihan !== undefined
-      ? order.SisaTagihan
-      : Math.max(0, order.TotalHarga - dpAmount);
+      ? Number(order.SisaTagihan)
+      : Math.max(0, totalAmount - dpAmount);
 
   // Klik tombol Konfirmasi Order: langsung membuka nomor WhatsApp Customer dengan pesan rincian lengkap
   const handleConfirmOrderWhatsApp = () => {
@@ -144,22 +171,17 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         return;
       }
 
-      const message = formatOrderWhatsAppConfirmation(order, storeData);
+      const message = formatOrderWhatsAppConfirmation(order, storeData, orderItems);
       const waUrl = createWhatsAppUrl(destPhone, message);
       window.open(waUrl, '_blank');
     } else {
       // Tampilan Customer: Menghubungi CS Toko
       const csPhone = cleanWhatsAppPhone(storeData.kontak || '085815950700');
-      const message = formatCustomerToAdminWhatsAppConfirmation(order, storeData);
+      const message = formatCustomerToAdminWhatsAppConfirmation(order, storeData, orderItems);
       const waUrl = createWhatsAppUrl(csPhone, message);
       window.open(waUrl, '_blank');
     }
   };
-
-  const isMeteran = order.Kategori === 'meteran';
-  const luasM2 = isMeteran
-    ? Math.max(1, ((order.Panjang || 100) / 100) * ((order.Lebar || 100) / 100))
-    : 0;
 
   return (
     <>
@@ -169,7 +191,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto print:hidden">
         <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-slate-100 my-auto animate-in fade-in zoom-in-95 duration-200">
           {/* Header Modal */}
-          <div className="bg-linear-to-r from-teal-700 via-teal-800 to-slate-900 text-white p-5 flex items-start justify-between relative">
+          <div className="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 text-white p-5 flex items-start justify-between relative">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-white/20 text-teal-100">
@@ -180,9 +202,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 </span>
               </div>
               <h3 className="text-base font-extrabold text-white">
-                {order.Items && order.Items.length > 1
-                  ? `${order.NamaCustomer} (${order.Items.length} Produk)`
-                  : order.NamaProduk}
+                {displayItems.length > 1
+                  ? `${order.NamaCustomer} (${displayItems.length} Produk)`
+                  : (displayItems[0]?.namaProduk || order.NamaProduk)}
               </h3>
               <p className="text-[11px] text-teal-200 mt-0.5">
                 {formatDate(order.Tgl)}
@@ -256,164 +278,99 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               {order.NoCustomer && (
                 <div className="flex justify-between items-center text-slate-600 text-[11px]">
                   <span>WhatsApp:</span>
-                  <span className="font-semibold text-slate-800 font-mono">{order.NoCustomer}</span>
+                  <span className="font-semibold text-slate-800 font-mono">{String(order.NoCustomer)}</span>
                 </div>
               )}
             </div>
 
-            {/* RINCIAN SETIAP PRODUK YANG DIPESAN */}
+            {/* RINCIAN SETIAP PRODUK YANG DIPESAN (Mendukung Satuan & Multi-Item) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
-                  Rincian Tiap Produk ({order.Items?.length || 1} Item)
+                  Rincian Tiap Produk ({displayItems.length} Item)
                 </h4>
               </div>
 
-              {order.Items && order.Items.length > 0 ? (
-                <div className="space-y-2.5">
-                  {order.Items.map((item, idx) => {
-                    const itemIsMeteran = item.kategori === 'meteran';
-                    const itemLuas = itemIsMeteran && item.panjang && item.lebar
-                      ? Math.max(1, ((item.panjang / 100) * (item.lebar / 100)))
-                      : 0;
+              <div className="space-y-2.5">
+                {displayItems.map((item, idx) => {
+                  const itemIsMeteran = item.kategori === 'meteran' || ((item.panjang || 0) > 0 && (item.lebar || 0) > 0);
+                  const itemLuas = itemIsMeteran && item.panjang && item.lebar
+                    ? Math.max(1, ((item.panjang / 100) * (item.lebar / 100)))
+                    : 0;
 
-                    return (
-                      <div
-                        key={item.id || idx}
-                        className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/90 space-y-2 text-xs"
-                      >
-                        <div className="flex items-start justify-between gap-2 border-b border-slate-200/70 pb-2">
-                          <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                            <span className="w-5 h-5 rounded-full bg-teal-700 text-white text-[10px] flex items-center justify-center shrink-0">
-                              {idx + 1}
-                            </span>
-                            <span>{item.namaProduk}</span>
-                          </div>
-                          <span className="text-teal-700 font-extrabold text-sm shrink-0">
-                            {formatRp(item.subtotal)}
+                  return (
+                    <div
+                      key={item.id || idx}
+                      className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/90 space-y-2 text-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2 border-b border-slate-200/70 pb-2">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                          <span className="w-5 h-5 rounded-full bg-teal-700 text-white text-[10px] flex items-center justify-center shrink-0">
+                            {idx + 1}
                           </span>
+                          <span>{item.namaProduk}</span>
+                        </div>
+                        <span className="text-teal-700 font-extrabold text-sm shrink-0">
+                          {formatRp(item.subtotal)}
+                        </span>
+                      </div>
+
+                      {/* Detail Spesifikasi Item */}
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-slate-600">
+                        <div>
+                          <span className="text-slate-400">Jumlah (Qty):</span>{' '}
+                          <strong className="text-slate-800">{item.qty} pcs</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Harga Satuan:</span>{' '}
+                          <span>{formatRp(item.harga)}</span>
                         </div>
 
-                        {/* Detail Spesifikasi Item */}
-                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-slate-600">
-                          <div>
-                            <span className="text-slate-400">Jumlah (Qty):</span>{' '}
-                            <strong className="text-slate-800">{item.qty} pcs</strong>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">Harga Satuan:</span>{' '}
-                            <span>{formatRp(item.harga)}</span>
-                          </div>
-
-                          {itemIsMeteran && item.panjang && item.lebar && (
-                            <>
-                              <div className="col-span-2">
-                                <span className="text-slate-400">Ukuran Cetak:</span>{' '}
-                                <strong className="text-slate-800">
-                                  {item.panjang} x {item.lebar} cm ({itemLuas.toFixed(2)} m²)
-                                </strong>
-                              </div>
-                              <div className="col-span-2">
-                                <span className="text-slate-400">Finishing:</span>{' '}
-                                <span className="font-semibold text-teal-800 bg-teal-100/70 px-1.5 py-0.5 rounded text-[10px]">
-                                  {item.finishing || 'Simkel'}
-                                </span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-
-                        {/* Layanan Tambahan per Item */}
-                        {(item.withDesain || item.withCutting || item.withLaminating) && (
-                          <div className="pt-1.5 border-t border-dashed border-slate-200 text-[10px] space-y-0.5 text-slate-500">
-                            {item.withDesain && (
-                              <div className="flex justify-between">
-                                <span>+ Jasa Desain:</span>
-                                <span className="font-semibold text-teal-700">{formatRp(item.jasaDesain || 0)}</span>
-                              </div>
-                            )}
-                            {item.withCutting && (
-                              <div className="flex justify-between">
-                                <span>+ Jasa Cutting Presisi:</span>
-                                <span className="font-semibold text-teal-700">{formatRp(item.jasaCutting || 0)}</span>
-                              </div>
-                            )}
-                            {item.withLaminating && (
-                              <div className="flex justify-between">
-                                <span>+ Jasa Laminating:</span>
-                                <span className="font-semibold text-teal-700">{formatRp(item.jasaLaminating || 0)}</span>
-                              </div>
-                            )}
-                          </div>
+                        {itemIsMeteran && item.panjang && item.lebar && (
+                          <>
+                            <div className="col-span-2">
+                              <span className="text-slate-400">Ukuran Cetak:</span>{' '}
+                              <strong className="text-slate-800">
+                                {item.panjang} x {item.lebar} cm ({itemLuas.toFixed(2)} m²)
+                              </strong>
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-slate-400">Finishing:</span>{' '}
+                              <span className="font-semibold text-teal-800 bg-teal-100/70 px-1.5 py-0.5 rounded text-[10px]">
+                                {item.finishing || 'Simkel'}
+                              </span>
+                            </div>
+                          </>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* Single Product Order Fallback */
-                <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-100 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-slate-800 text-xs">
-                      1. {order.NamaProduk}
-                    </span>
-                    <span className="font-extrabold text-teal-700 text-sm">
-                      {formatRp(order.TotalHarga)}
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-600">
-                    <div>
-                      <span className="text-slate-400">Kategori:</span>{' '}
-                      <span className="capitalize font-semibold">{order.Kategori}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Qty:</span>{' '}
-                      <strong className="text-slate-800">{order.Qty} pcs</strong>
-                    </div>
-
-                    {isMeteran && (
-                      <>
-                        <div className="col-span-2">
-                          <span className="text-slate-400">Ukuran:</span>{' '}
-                          <strong className="text-slate-800">
-                            {order.Panjang} x {order.Lebar} cm ({luasM2.toFixed(2)} m²)
-                          </strong>
-                        </div>
-                        <div className="col-span-2">
-                          <span className="text-slate-400">Finishing:</span>{' '}
-                          <span className="font-semibold text-teal-800 bg-teal-100/70 px-1.5 py-0.5 rounded text-[10px]">
-                            {order.Finishing || 'Tanpa Finishing'}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {((order.JasaDesain || 0) > 0 || (order.JasaCutting || 0) > 0 || (order.JasaLaminating || 0) > 0) && (
-                    <div className="pt-1.5 border-t border-dashed border-slate-200 text-[10px] space-y-0.5 text-slate-500">
-                      {(order.JasaDesain || 0) > 0 && (
-                        <div className="flex justify-between">
-                          <span>+ Jasa Desain:</span>
-                          <span className="font-semibold text-teal-700">{formatRp(order.JasaDesain || 0)}</span>
-                        </div>
-                      )}
-                      {(order.JasaCutting || 0) > 0 && (
-                        <div className="flex justify-between">
-                          <span>+ Jasa Cutting:</span>
-                          <span className="font-semibold text-teal-700">{formatRp(order.JasaCutting || 0)}</span>
-                        </div>
-                      )}
-                      {(order.JasaLaminating || 0) > 0 && (
-                        <div className="flex justify-between">
-                          <span>+ Jasa Laminating:</span>
-                          <span className="font-semibold text-teal-700">{formatRp(order.JasaLaminating || 0)}</span>
+                      {/* Layanan Tambahan per Item */}
+                      {(item.withDesain || item.withCutting || item.withLaminating || (item.jasaDesain || 0) > 0 || (item.jasaCutting || 0) > 0 || (item.jasaLaminating || 0) > 0) && (
+                        <div className="pt-1.5 border-t border-dashed border-slate-200 text-[10px] space-y-0.5 text-slate-500">
+                          {(item.withDesain || (item.jasaDesain || 0) > 0) && (
+                            <div className="flex justify-between">
+                              <span>+ Jasa Desain:</span>
+                              <span className="font-semibold text-teal-700">{formatRp(item.jasaDesain || 0)}</span>
+                            </div>
+                          )}
+                          {(item.withCutting || (item.jasaCutting || 0) > 0) && (
+                            <div className="flex justify-between">
+                              <span>+ Jasa Cutting Presisi:</span>
+                              <span className="font-semibold text-teal-700">{formatRp(item.jasaCutting || 0)}</span>
+                            </div>
+                          )}
+                          {(item.withLaminating || (item.jasaLaminating || 0) > 0) && (
+                            <div className="flex justify-between">
+                              <span>+ Jasa Laminating:</span>
+                              <span className="font-semibold text-teal-700">{formatRp(item.jasaLaminating || 0)}</span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
 
             {/* Rincian Tagihan & Pembayaran */}
@@ -452,27 +409,29 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               </div>
             </div>
 
-            {/* Catatan Tambahan jika ada */}
+            {/* Catatan Order */}
             {order.Catatan && (
-              <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-amber-900 space-y-1">
-                <span className="font-bold text-[11px] block">Catatan Pesanan:</span>
-                <p className="text-[11px] italic leading-relaxed">
-                  "{order.Catatan}"
-                </p>
+              <div className="space-y-1">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
+                  Catatan Pemesanan
+                </h4>
+                <div className="bg-amber-50/70 border border-amber-200 p-3 rounded-2xl text-xs text-amber-900 leading-relaxed">
+                  {order.Catatan}
+                </div>
               </div>
             )}
 
-            {/* Rekening Pembayaran Toko */}
+            {/* Rekening Pembayaran Toko (Mendukung Multi-Rekening Bank & E-Wallet) */}
             <div className="bg-slate-900 text-white rounded-2xl p-4 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-teal-400 font-bold text-xs">
                   <CreditCard className="w-4 h-4" />
                   <span>Info Rekening Pembayaran / Transfer</span>
                 </div>
-                {(!storeData.bank_accounts || storeData.bank_accounts.length <= 1) && (
+                {normalizedBankAccounts.length <= 1 && (
                   <button
                     type="button"
-                    onClick={() => handleCopyRekening(storeData.bank_accounts?.[0]?.nomor || storeData.rekening)}
+                    onClick={() => handleCopyRekening(normalizedBankAccounts[0]?.nomor || storeData.rekening)}
                     className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded flex items-center gap-1 transition cursor-pointer"
                   >
                     {copiedRekening ? (
@@ -488,9 +447,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 )}
               </div>
 
-              {storeData.bank_accounts && storeData.bank_accounts.length > 0 ? (
+              {normalizedBankAccounts.length > 0 ? (
                 <div className="space-y-2">
-                  {storeData.bank_accounts.map((b) => (
+                  {normalizedBankAccounts.map((b) => (
                     <div
                       key={b.id}
                       className="flex items-center justify-between bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/80 text-xs"
@@ -533,23 +492,28 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                   ))}
                 </div>
               ) : (
-                <div className="text-[11px] text-slate-300 font-mono bg-slate-800/80 p-2.5 rounded-xl border border-slate-700">
+                <div className="bg-slate-800 p-2.5 rounded-xl font-mono text-teal-300 text-xs">
                   {storeData.rekening || 'CIMB Niaga 763568966600 a.n Muhammad Rosyid Ridlo'}
                 </div>
               )}
+
+              <p className="text-[10px] text-slate-400 italic">
+                *Silakan transfer sesuai sisa tagihan dan kirimkan bukti transfer melalui WhatsApp.
+              </p>
             </div>
           </div>
 
-          {/* Footer Actions: Tombol Konfirmasi Order & Cetak */}
-          <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
+          {/* Modal Footer Action Buttons */}
+          <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center gap-2.5">
             {userRole === 'admin' ? (
               <button
                 type="button"
                 onClick={handleConfirmOrderWhatsApp}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
+                title="Kirim pesan WhatsApp rincian nota pesanan ke customer"
               >
                 <MessageCircle className="w-4 h-4" />
-                <span>Konfirmasi Order</span>
+                <span>Kirim Nota ke WA Customer</span>
               </button>
             ) : (
               <button
@@ -613,7 +577,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </div>
           <div>
             <span className="text-gray-500">No. WhatsApp:</span>{' '}
-            <strong className="text-black">{order.NoCustomer || '-'}</strong>
+            <strong className="text-black">{String(order.NoCustomer || '-')}</strong>
           </div>
           <div>
             <span className="text-gray-500">ID Customer:</span>{' '}
@@ -625,7 +589,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Tabel Detail Tiap Produk */}
+        {/* Tabel Detail Tiap Produk (Mendukung Satuan dan Multi-Item) */}
         <table className="w-full text-xs border-collapse border border-gray-400 mb-4">
           <thead>
             <tr className="bg-gray-100 text-gray-800">
@@ -637,66 +601,38 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </tr>
           </thead>
           <tbody>
-            {order.Items && order.Items.length > 0 ? (
-              order.Items.map((item, idx) => {
-                const itemIsMeteran = item.kategori === 'meteran';
-                const itemLuas = itemIsMeteran && item.panjang && item.lebar
-                  ? Math.max(1, ((item.panjang / 100) * (item.lebar / 100)))
-                  : 0;
+            {displayItems.map((item, idx) => {
+              const itemIsMeteran = item.kategori === 'meteran' || ((item.panjang || 0) > 0 && (item.lebar || 0) > 0);
+              const itemLuas = itemIsMeteran && item.panjang && item.lebar
+                ? Math.max(1, ((item.panjang / 100) * (item.lebar / 100)))
+                : 0;
 
-                return (
-                  <tr key={item.id || idx}>
-                    <td className="border border-gray-400 p-2 text-center font-bold">{idx + 1}</td>
-                    <td className="border border-gray-400 p-2">
-                      <div className="font-bold">{item.namaProduk}</div>
-                      {itemIsMeteran && item.panjang && item.lebar && (
-                        <div className="text-[10px] text-gray-600">
-                          Ukuran: {item.panjang} x {item.lebar} cm ({itemLuas.toFixed(2)} m²) • Finishing: {item.finishing || 'Simkel'}
-                        </div>
-                      )}
-                      {(item.withDesain || item.withCutting || item.withLaminating) && (
-                        <div className="text-[10px] text-gray-600 italic">
-                          Layanan: {[
-                            item.withDesain ? `Desain (${formatRp(item.jasaDesain || 0)})` : '',
-                            item.withCutting ? `Cutting (${formatRp(item.jasaCutting || 0)})` : '',
-                            item.withLaminating ? `Laminasi (${formatRp(item.jasaLaminating || 0)})` : ''
-                          ].filter(Boolean).join(', ')}
-                        </div>
-                      )}
-                    </td>
-                    <td className="border border-gray-400 p-2 text-center">{item.qty} pcs</td>
-                    <td className="border border-gray-400 p-2 text-right">{formatRp(item.harga)}</td>
-                    <td className="border border-gray-400 p-2 text-right font-bold">{formatRp(item.subtotal)}</td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td className="border border-gray-400 p-2 text-center font-bold">1</td>
-                <td className="border border-gray-400 p-2">
-                  <div className="font-bold">{order.NamaProduk}</div>
-                  {isMeteran && (
-                    <div className="text-[10px] text-gray-600">
-                      Ukuran: {order.Panjang} x {order.Lebar} cm ({luasM2.toFixed(2)} m²) • Finishing: {order.Finishing || 'Tanpa Finishing'}
-                    </div>
-                  )}
-                  {((order.JasaDesain || 0) > 0 || (order.JasaCutting || 0) > 0 || (order.JasaLaminating || 0) > 0) && (
-                    <div className="text-[10px] text-gray-600 italic">
-                      Layanan: {[
-                        (order.JasaDesain || 0) > 0 ? `Desain (${formatRp(order.JasaDesain)})` : '',
-                        (order.JasaCutting || 0) > 0 ? `Cutting (${formatRp(order.JasaCutting)})` : '',
-                        (order.JasaLaminating || 0) > 0 ? `Laminasi (${formatRp(order.JasaLaminating)})` : ''
-                      ].filter(Boolean).join(', ')}
-                    </div>
-                  )}
-                </td>
-                <td className="border border-gray-400 p-2 text-center">{order.Qty} pcs</td>
-                <td className="border border-gray-400 p-2 text-right">
-                  {formatRp(order.TotalHarga - (order.JasaDesain || 0) - (order.JasaCutting || 0) - (order.JasaLaminating || 0))}
-                </td>
-                <td className="border border-gray-400 p-2 text-right font-bold">{formatRp(order.TotalHarga)}</td>
-              </tr>
-            )}
+              return (
+                <tr key={item.id || idx}>
+                  <td className="border border-gray-400 p-2 text-center font-bold">{idx + 1}</td>
+                  <td className="border border-gray-400 p-2">
+                    <div className="font-bold">{item.namaProduk}</div>
+                    {itemIsMeteran && item.panjang && item.lebar && (
+                      <div className="text-[10px] text-gray-600">
+                        Ukuran: {item.panjang} x {item.lebar} cm ({itemLuas.toFixed(2)} m²) • Finishing: {item.finishing || 'Simkel'}
+                      </div>
+                    )}
+                    {(item.withDesain || item.withCutting || item.withLaminating || (item.jasaDesain || 0) > 0 || (item.jasaCutting || 0) > 0 || (item.jasaLaminating || 0) > 0) && (
+                      <div className="text-[10px] text-gray-600 italic">
+                        Layanan: {[
+                          (item.withDesain || (item.jasaDesain || 0) > 0) ? `Desain (${formatRp(item.jasaDesain || 0)})` : '',
+                          (item.withCutting || (item.jasaCutting || 0) > 0) ? `Cutting (${formatRp(item.jasaCutting || 0)})` : '',
+                          (item.withLaminating || (item.jasaLaminating || 0) > 0) ? `Laminasi (${formatRp(item.jasaLaminating || 0)})` : ''
+                        ].filter(Boolean).join(', ')}
+                      </div>
+                    )}
+                  </td>
+                  <td className="border border-gray-400 p-2 text-center">{item.qty} pcs</td>
+                  <td className="border border-gray-400 p-2 text-right">{formatRp(item.harga)}</td>
+                  <td className="border border-gray-400 p-2 text-right font-bold">{formatRp(item.subtotal)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
@@ -710,9 +646,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             )}
             <div className="border border-gray-300 p-2 rounded bg-gray-50 text-[11px]">
               <div><strong>Rekening Pembayaran:</strong></div>
-              {storeData.bank_accounts && storeData.bank_accounts.length > 0 ? (
+              {normalizedBankAccounts.length > 0 ? (
                 <div className="space-y-0.5 mt-1 font-mono">
-                  {storeData.bank_accounts.map((b) => (
+                  {normalizedBankAccounts.map((b) => (
                     <div key={b.id}>
                       • <strong>{b.bank}:</strong> {b.nomor} (a.n {b.atasNama}) {b.isPrimary ? '★' : ''}
                     </div>

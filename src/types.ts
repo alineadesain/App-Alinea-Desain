@@ -3,7 +3,7 @@ export interface User {
   Role: 'admin' | 'customer';
   KodeKhusus: string;
   Nama: string;
-  NoWA: string;
+  NoWA: string | number;
   Alamat: string;
   Password: string;
   TglDaftar: string;
@@ -48,7 +48,7 @@ export interface Order {
   Tgl: string;
   KodeCustomer: string;
   NamaCustomer: string;
-  NoCustomer: string;
+  NoCustomer: string | number;
   IDProduk: string;
   NamaProduk: string;
   Kategori: 'satuan' | 'meteran';
@@ -66,7 +66,7 @@ export interface Order {
   StatusBayar: 'Belum Lunas' | 'DP' | 'Lunas';
   StatusOrder: 'Order Masuk' | 'Proses' | 'Selesai';
   Catatan?: string;
-  Items?: OrderItem[];
+  Items?: OrderItem[] | any;
 }
 
 export interface Expense {

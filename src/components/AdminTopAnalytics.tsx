@@ -9,9 +9,11 @@ import {
   Sparkles,
   ShoppingBag,
   DollarSign,
-  ChevronRight
+  ChevronRight,
+  Eye
 } from 'lucide-react';
 import { Order, Product, User } from '../types';
+import { getOrderDisplayItems } from '../utils/whatsappFormatter';
 
 interface AdminTopAnalyticsProps {
   orders: Order[];
@@ -21,6 +23,7 @@ interface AdminTopAnalyticsProps {
   hasDateFilter: boolean;
   filterStartDate?: string;
   filterEndDate?: string;
+  onSelectOrder?: (order: Order) => void;
 }
 
 export const AdminTopAnalytics: React.FC<AdminTopAnalyticsProps> = ({
@@ -30,7 +33,8 @@ export const AdminTopAnalytics: React.FC<AdminTopAnalyticsProps> = ({
   users,
   hasDateFilter,
   filterStartDate,
-  filterEndDate
+  filterEndDate,
+  onSelectOrder
 }) => {
   // Toggle scope: 'filtered' (sesuai filter tanggal jika ada) vs 'all' (semua waktu)
   const [scope, setScope] = useState<'filtered' | 'all'>('filtered');
@@ -40,158 +44,166 @@ export const AdminTopAnalytics: React.FC<AdminTopAnalyticsProps> = ({
 
   // Format Rupiah
   const formatRp = (num: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0
-    }).format(num);
+    return 'Rp ' + Math.round(Number(num) || 0).toLocaleString('id-ID');
   };
 
   // 1. TOP 5 PRODUK UNGGULAN PALING BANYAK DIPESAN
   const topProducts = useMemo(() => {
-    const productStats: Record<
-      string,
-      {
-        id: string;
-        nama: string;
-        kategori: string;
-        totalQty: number;
-        totalRevenue: number;
-        orderCount: number;
-      }
-    > = {};
-
-    // Inisialisasi dari katalog produk toko
-    products.forEach((p) => {
-      productStats[p.ID] = {
-        id: p.ID,
-        nama: p.Nama,
-        kategori: p.Kategori || 'satuan',
-        totalQty: 0,
-        totalRevenue: 0,
-        orderCount: 0
-      };
-    });
-
-    // Hitung kemunculan dari pesanan
-    effectiveOrders.forEach((ord) => {
-      if (ord.Items && Array.isArray(ord.Items) && ord.Items.length > 0) {
-        ord.Items.forEach((it) => {
-          const key = it.productId || it.namaProduk || 'UNKNOWN';
-          if (!productStats[key]) {
-            productStats[key] = {
-              id: key,
-              nama: it.namaProduk,
-              kategori: it.kategori || 'satuan',
-              totalQty: 0,
-              totalRevenue: 0,
-              orderCount: 0
-            };
-          }
-          productStats[key].totalQty += Number(it.qty || 1);
-          productStats[key].totalRevenue += Number(it.subtotal || (it.harga * (it.qty || 1)));
-          productStats[key].orderCount += 1;
-        });
-      } else {
-        const key = ord.IDProduk || ord.NamaProduk || 'UNKNOWN';
-        if (!productStats[key]) {
-          productStats[key] = {
-            id: key,
-            nama: ord.NamaProduk,
-            kategori: ord.Kategori || 'satuan',
-            totalQty: 0,
-            totalRevenue: 0,
-            orderCount: 0
-          };
+    try {
+      const productStats: Record<
+        string,
+        {
+          id: string;
+          nama: string;
+          kategori: string;
+          totalQty: number;
+          totalRevenue: number;
+          orderCount: number;
         }
-        productStats[key].totalQty += Number(ord.Qty || 1);
-        productStats[key].totalRevenue += Number(ord.TotalHarga || 0);
-        productStats[key].orderCount += 1;
-      }
-    });
+      > = {};
 
-    // Urutkan berdasarkan totalQty descending, fallback ke totalRevenue
-    const list = Object.values(productStats);
-    list.sort((a, b) => {
-      if (b.totalQty !== a.totalQty) {
-        return b.totalQty - a.totalQty;
-      }
-      return b.totalRevenue - a.totalRevenue;
-    });
+      // Inisialisasi dari katalog produk toko
+      products.forEach((p) => {
+        if (!p) return;
+        productStats[p.ID] = {
+          id: p.ID,
+          nama: p.Nama || 'Produk',
+          kategori: p.Kategori || 'satuan',
+          totalQty: 0,
+          totalRevenue: 0,
+          orderCount: 0
+        };
+      });
 
-    return list.slice(0, 5);
+      // Hitung kemunculan dari pesanan menggunakan getOrderDisplayItems agar akurat untuk satuan maupun multi-item
+      effectiveOrders.forEach((ord) => {
+        if (!ord) return;
+        const displayItems = getOrderDisplayItems(ord);
+
+        if (displayItems && displayItems.length > 0) {
+          displayItems.forEach((it) => {
+            const key = it.productId || it.namaProduk || 'UNKNOWN';
+            if (!productStats[key]) {
+              productStats[key] = {
+                id: key,
+                nama: it.namaProduk || 'Produk Cetak',
+                kategori: it.kategori || 'satuan',
+                totalQty: 0,
+                totalRevenue: 0,
+                orderCount: 0
+              };
+            }
+            productStats[key].totalQty += Number(it.qty || 1);
+            productStats[key].totalRevenue += Number(it.subtotal || (it.harga * (it.qty || 1)));
+            productStats[key].orderCount += 1;
+          });
+        }
+      });
+
+      // Urutkan berdasarkan totalQty descending, fallback ke totalRevenue
+      const list = Object.values(productStats);
+      list.sort((a, b) => {
+        if (b.totalQty !== a.totalQty) {
+          return b.totalQty - a.totalQty;
+        }
+        return b.totalRevenue - a.totalRevenue;
+      });
+
+      return list.slice(0, 5);
+    } catch (e) {
+      console.error('Error calculating topProducts:', e);
+      return [];
+    }
   }, [effectiveOrders, products]);
 
   // 2 & 3. DATA AGREGASI CUSTOMER (ORDER COUNT & TOTAL SPENT)
   const { topCustomerByOrders, topCustomerBySpent } = useMemo(() => {
-    const custMap: Record<
-      string,
-      {
-        key: string;
-        nama: string;
-        kode: string;
-        noWA: string;
-        totalOrders: number;
-        totalSpent: number;
-        lastOrderDate: string;
-      }
-    > = {};
+    try {
+      const custMap: Record<
+        string,
+        {
+          key: string;
+          nama: string;
+          kode: string;
+          noWA: string;
+          totalOrders: number;
+          totalSpent: number;
+          lastOrderDate: string;
+        }
+      > = {};
 
-    effectiveOrders.forEach((ord) => {
-      const cleanPhone = String(ord.NoCustomer || '').replace(/[^0-9]/g, '');
-      const custKey = ord.KodeCustomer && ord.KodeCustomer !== '-'
-        ? `KODE_${ord.KodeCustomer}`
-        : cleanPhone ? `WA_${cleanPhone}` : `NAME_${ord.NamaCustomer.toLowerCase()}`;
+      effectiveOrders.forEach((ord) => {
+        if (!ord) return;
+        const cleanPhone = String(ord.NoCustomer || '').replace(/[^0-9]/g, '');
+        const custKey = ord.KodeCustomer && ord.KodeCustomer !== '-'
+          ? `KODE_${String(ord.KodeCustomer).trim()}`
+          : cleanPhone ? `WA_${cleanPhone}` : `NAME_${String(ord.NamaCustomer || 'Customer').toLowerCase()}`;
 
-      if (!custMap[custKey]) {
-        // Cari di daftar users untuk detail lebih lengkap
-        const userMatch = users.find(
-          (u) =>
-            (ord.KodeCustomer && u.KodeKhusus === ord.KodeCustomer) ||
-            (cleanPhone && u.NoWA && u.NoWA.replace(/[^0-9]/g, '') === cleanPhone)
-        );
+        if (!custMap[custKey]) {
+          // Cari di daftar users untuk detail lebih lengkap secara aman
+          const userMatch = users.find(
+            (u) => {
+              if (!u) return false;
+              const uCode = String(u.KodeKhusus || '').trim();
+              const ordCode = String(ord.KodeCustomer || '').trim();
+              if (ordCode && ordCode !== '-' && uCode === ordCode) return true;
 
-        custMap[custKey] = {
-          key: custKey,
-          nama: userMatch?.Nama || ord.NamaCustomer || 'Customer',
-          kode: userMatch?.KodeKhusus || ord.KodeCustomer || '-',
-          noWA: userMatch?.NoWA || ord.NoCustomer || '-',
-          totalOrders: 0,
-          totalSpent: 0,
-          lastOrderDate: ord.Tgl
-        };
-      }
+              const uPhone = String(u.NoWA || '').replace(/[^0-9]/g, '');
+              if (cleanPhone && uPhone && (uPhone === cleanPhone || uPhone.endsWith(cleanPhone) || cleanPhone.endsWith(uPhone))) return true;
 
-      custMap[custKey].totalOrders += 1;
-      custMap[custKey].totalSpent += Number(ord.TotalHarga || 0);
+              return false;
+            }
+          );
 
-      if (new Date(ord.Tgl) > new Date(custMap[custKey].lastOrderDate)) {
-        custMap[custKey].lastOrderDate = ord.Tgl;
-      }
-    });
+          custMap[custKey] = {
+            key: custKey,
+            nama: userMatch?.Nama || ord.NamaCustomer || 'Customer',
+            kode: String(userMatch?.KodeKhusus || ord.KodeCustomer || '-'),
+            noWA: String(userMatch?.NoWA || ord.NoCustomer || '-'),
+            totalOrders: 0,
+            totalSpent: 0,
+            lastOrderDate: ord.Tgl || new Date().toISOString()
+          };
+        }
 
-    const custList = Object.values(custMap);
+        custMap[custKey].totalOrders += 1;
+        custMap[custKey].totalSpent += Number(ord.TotalHarga || 0);
 
-    // Top Customer berdasarkan Frekuensi Order terbanyak
-    const byOrders = [...custList].sort((a, b) => {
-      if (b.totalOrders !== a.totalOrders) {
-        return b.totalOrders - a.totalOrders;
-      }
-      return b.totalSpent - a.totalSpent;
-    }).slice(0, 5);
+        if (ord.Tgl) {
+          const ordTime = new Date(ord.Tgl).getTime();
+          const lastTime = new Date(custMap[custKey].lastOrderDate).getTime();
+          if (!isNaN(ordTime) && (isNaN(lastTime) || ordTime > lastTime)) {
+            custMap[custKey].lastOrderDate = ord.Tgl;
+          }
+        }
+      });
 
-    // Top Customer berdasarkan Total Nominal Pembelian terbanyak
-    const bySpent = [...custList].sort((a, b) => {
-      if (b.totalSpent !== a.totalSpent) {
+      const custList = Object.values(custMap);
+
+      // Top Customer berdasarkan Frekuensi Order terbanyak
+      const byOrders = [...custList].sort((a, b) => {
+        if (b.totalOrders !== a.totalOrders) {
+          return b.totalOrders - a.totalOrders;
+        }
         return b.totalSpent - a.totalSpent;
-      }
-      return b.totalOrders - a.totalOrders;
-    }).slice(0, 5);
+      }).slice(0, 5);
 
-    return {
-      topCustomerByOrders: byOrders,
-      topCustomerBySpent: bySpent
-    };
+      // Top Customer berdasarkan Total Nominal Pembelian terbanyak
+      const bySpent = [...custList].sort((a, b) => {
+        if (b.totalSpent !== a.totalSpent) {
+          return b.totalSpent - a.totalSpent;
+        }
+        return b.totalOrders - a.totalOrders;
+      }).slice(0, 5);
+
+      return {
+        topCustomerByOrders: byOrders,
+        topCustomerBySpent: bySpent
+      };
+    } catch (e) {
+      console.error('Error calculating top customers:', e);
+      return { topCustomerByOrders: [], topCustomerBySpent: [] };
+    }
   }, [effectiveOrders, users]);
 
   // Helper badge peringkat juara 1, 2, 3

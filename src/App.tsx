@@ -495,9 +495,9 @@ export default function App() {
       if (ord) {
         const cust = appData.users.find(
           (u) =>
-            u.KodeKhusus === ord.KodeCustomer ||
-            u.Nama.toLowerCase() === ord.NamaCustomer.toLowerCase() ||
-            (u.NoWA && ord.NoCustomer && u.NoWA.replace(/[^0-9]/g, '') === ord.NoCustomer.replace(/[^0-9]/g, ''))
+            (ord.KodeCustomer && u.KodeKhusus === ord.KodeCustomer) ||
+            (u.Nama && ord.NamaCustomer && u.Nama.toLowerCase() === ord.NamaCustomer.toLowerCase()) ||
+            (cleanWhatsAppPhone(u.NoWA) && cleanWhatsAppPhone(ord.NoCustomer) && cleanWhatsAppPhone(u.NoWA) === cleanWhatsAppPhone(ord.NoCustomer))
         );
         sendOrderStatusChangedNotification(ord, cust, newStatus, appData.storeData)
           .then((res) => console.log('WA update status result:', res))
@@ -817,9 +817,9 @@ export default function App() {
     if (appData.storeData.wa_auto_order !== false) {
       const targetCustomer = newCustomer || appData.users.find(
         (u) =>
-          u.KodeKhusus === readyOrder.KodeCustomer ||
-          u.Nama.toLowerCase() === readyOrder.NamaCustomer.toLowerCase() ||
-          (u.NoWA && readyOrder.NoCustomer && u.NoWA.replace(/[^0-9]/g, '') === readyOrder.NoCustomer.replace(/[^0-9]/g, ''))
+          (readyOrder.KodeCustomer && u.KodeKhusus === readyOrder.KodeCustomer) ||
+          (u.Nama && readyOrder.NamaCustomer && u.Nama.toLowerCase() === readyOrder.NamaCustomer.toLowerCase()) ||
+          (cleanWhatsAppPhone(u.NoWA) && cleanWhatsAppPhone(readyOrder.NoCustomer) && cleanWhatsAppPhone(u.NoWA) === cleanWhatsAppPhone(readyOrder.NoCustomer))
       );
       sendOrderCreatedNotification(readyOrder, targetCustomer, appData.storeData)
         .then((waRes) => console.log('WA order baru admin result:', waRes))
@@ -946,6 +946,15 @@ export default function App() {
                   ? o.SisaTagihan
                   : (o.sisaTagihan !== undefined && o.sisaTagihan !== null && o.sisaTagihan !== '' ? o.sisaTagihan : undefined));
               const sisa = rawSisa !== undefined ? Number(rawSisa) : Math.max(0, total - dp);
+              let parsedItems = o.Items;
+              if (typeof parsedItems === 'string') {
+                try {
+                  const arr = JSON.parse(parsedItems);
+                  if (Array.isArray(arr)) parsedItems = arr;
+                } catch {
+                  // ignore
+                }
+              }
               return {
                 ...o,
                 ID: String(o.ID),
@@ -960,10 +969,12 @@ export default function App() {
                 NominalDP: dp,
                 SisaTagihan: sisa,
                 StatusBayar: o.StatusBayar || (dp >= total && total > 0 ? 'Lunas' : (dp > 0 ? 'DP' : 'Belum Lunas')),
-                StatusOrder: o.StatusOrder || 'Order Masuk'
+                StatusOrder: o.StatusOrder || 'Order Masuk',
+                Items: parsedItems
               };
             })
           : prev.orders,
+        orderItems: remoteData.orderItems || prev.orderItems || [],
         expenses: (remoteData.expenses && remoteData.expenses.length > 0)
           ? remoteData.expenses.map((ex: any) => ({
               ...ex,
@@ -1303,7 +1314,7 @@ export default function App() {
                       if (target === 'order') setActiveCustMenu('order');
                       else if (target === 'products') setActiveCustMenu('products');
                       else if (target === 'contact') {
-                        const raw = (appData.storeData.kontak || '081234567890').replace(/[^0-9]/g, '');
+                        const raw = String(appData.storeData.kontak || '081234567890').replace(/[^0-9]/g, '');
                         const phone = raw.startsWith('0') ? '62' + raw.slice(1) : raw;
                         window.open(`https://wa.me/${phone}?text=Halo%20Alinea%20Desain,%20saya%20ingin%20konsultasi%20desain%20dan%20cetak`, '_blank');
                       }
@@ -2333,7 +2344,85 @@ export default function App() {
                     hasDateFilter={!!(filterStartDate || filterEndDate)}
                     filterStartDate={filterStartDate}
                     filterEndDate={filterEndDate}
+                    onSelectOrder={(ord) => setSelectedOrderForDetail(ord)}
                   />
+
+                  {/* Ringkasan Pesanan Masuk & Rincian Order di Menu Laporan */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-extrabold text-xs text-slate-800 uppercase tracking-wider">
+                          Daftar Transaksi Pesanan ({filteredOrders.length})
+                        </h3>
+                        <p className="text-[10px] text-slate-400">
+                          Klik untuk melihat rincian nota, cetak struk, atau konfirmasi WhatsApp
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveAdminMenu('transaksi')}
+                        className="text-xs text-teal-700 font-bold hover:underline flex items-center gap-1"
+                      >
+                        <span>Kelola Semua</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {filteredOrders.length === 0 ? (
+                      <div className="text-center py-6 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                        Tidak ada transaksi pesanan pada rentang laporan ini.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredOrders.slice(0, 5).map((ord) => (
+                          <div
+                            key={ord.ID}
+                            className="p-3 bg-slate-50 hover:bg-slate-100/80 rounded-xl border border-slate-200/70 transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-[10px] text-teal-700 font-bold bg-teal-100/60 px-1.5 py-0.2 rounded">
+                                  {ord.ID}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  {new Date(ord.Tgl).toLocaleDateString('id-ID')}
+                                </span>
+                              </div>
+                              <h4 className="font-bold text-xs text-slate-900 truncate mt-0.5">
+                                {ord.NamaCustomer} • <span className="text-slate-600 font-normal">{ord.NamaProduk}</span>
+                              </h4>
+                            </div>
+
+                            <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                              <div className="text-right">
+                                <div className="font-extrabold text-xs text-teal-700">
+                                  {formatRp(ord.TotalHarga)}
+                                </div>
+                                <span
+                                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                    ord.StatusBayar === 'Lunas'
+                                      ? 'bg-teal-50 text-teal-700'
+                                      : 'bg-rose-50 text-rose-700'
+                                  }`}
+                                >
+                                  {ord.StatusBayar}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setSelectedOrderForDetail(ord)}
+                                className="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-2xs transition active:scale-95 cursor-pointer"
+                              >
+                                <span>Lihat Rincian Order</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -2785,7 +2874,7 @@ export default function App() {
                         const q = customerSearch.toLowerCase();
                         return (
                           u.Nama.toLowerCase().includes(q) ||
-                          (u.NoWA && u.NoWA.includes(q)) ||
+                          (u.NoWA && String(u.NoWA).includes(q)) ||
                           (u.KodeKhusus && u.KodeKhusus.toLowerCase().includes(q)) ||
                           (u.Alamat && u.Alamat.toLowerCase().includes(q))
                         );
@@ -3487,6 +3576,7 @@ export default function App() {
           storeData={appData.storeData}
           onClose={() => setSelectedOrderForDetail(null)}
           users={appData.users}
+          orderItems={appData.orderItems || []}
           userRole={currentRole}
         />
 

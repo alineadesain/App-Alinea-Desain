@@ -8,6 +8,7 @@
 
 import { GAS_CONFIG } from '../config/gasConfig';
 import { Order, User, StoreData } from '../types';
+import { getOrderDisplayItems } from '../utils/whatsappFormatter';
 
 export interface WaResponse {
   success: boolean;
@@ -30,9 +31,9 @@ export interface DeviceStatusResponse {
 /**
  * Normalisasi nomor HP ke format internasional WhatsApp (628...)
  */
-export function normalizePhoneNumber(phone: string): string {
+export function normalizePhoneNumber(phone: any): string {
   if (!phone) return '';
-  let clean = phone.replace(/[^0-9]/g, '');
+  let clean = String(phone).replace(/[^0-9]/g, '');
   if (clean.startsWith('0')) {
     clean = '62' + clean.slice(1);
   } else if (clean.startsWith('+62')) {
@@ -196,9 +197,8 @@ export async function sendOrderCreatedNotification(
   const dpRp = order.DP ? formatRupiah(order.DP) : '0';
   const sisaRp = formatRupiah(Math.max(0, (order.TotalHarga || 0) - (order.DP || 0)));
 
-  const itemsText = order.Items && order.Items.length > 0
-    ? order.Items.map((it, idx) => `  ${idx + 1}. *${it.namaProduk}* (${it.qty}x) - Rp ${formatRupiah(it.subtotal)}`).join('\n')
-    : `  • *${order.NamaProduk}* (${order.Qty}x)`;
+  const displayItems = getOrderDisplayItems(order);
+  const itemsText = displayItems.map((it, idx) => `  ${idx + 1}. *${it.namaProduk}* (${it.qty}x) - Rp ${formatRupiah(it.subtotal)}`).join('\n');
 
   const formattedDate = order.Tgl
     ? new Date(order.Tgl).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -218,7 +218,7 @@ export async function sendOrderCreatedNotification(
     `Pesanan Anda segera kami proses dengan rapi dan presisi. Kami akan mengabari kembali saat cetakan telah selesai. 🙏\n\n` +
     `_${namaToko} - Solusi Desain & Cetak Anda_`;
 
-  return sendWhatsAppMessage(targetPhone, message, storeData.wa_api_key);
+  return sendWhatsAppMessage(String(targetPhone), message, storeData.wa_api_key);
 }
 
 /**
@@ -266,5 +266,5 @@ export async function sendOrderStatusChangedNotification(
       : '') +
     `Terima kasih telah mempercayakan cetakan Anda kepada *${namaToko}*! 🙏`;
 
-  return sendWhatsAppMessage(targetPhone, message, storeData.wa_api_key);
+  return sendWhatsAppMessage(String(targetPhone), message, storeData.wa_api_key);
 }

@@ -193,7 +193,7 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
       customerInfo = {
         kode: newCustomerObj.KodeKhusus,
         nama: newCustomerObj.Nama,
-        noWA: newCustomerObj.NoWA
+        noWA: String(newCustomerObj.NoWA)
       };
     } else {
       if (!selectedCustomer) {
@@ -203,7 +203,7 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
       customerInfo = {
         kode: selectedCustomer.KodeKhusus,
         nama: selectedCustomer.Nama,
-        noWA: selectedCustomer.NoWA
+        noWA: String(selectedCustomer.NoWA)
       };
     }
 

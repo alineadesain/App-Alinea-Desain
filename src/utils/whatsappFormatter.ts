@@ -1,10 +1,10 @@
-import { Order, User, StoreData } from '../types';
+import { Order, OrderItem, User, StoreData } from '../types';
 
 /**
  * Utilitas untuk membersihkan dan menstandarisasi nomor telepon WhatsApp ke format internasional (e.g. 6281234567890)
  */
-export function cleanWhatsAppPhone(rawPhone?: string): string {
-  if (!rawPhone) return '';
+export function cleanWhatsAppPhone(rawPhone?: any): string {
+  if (rawPhone === undefined || rawPhone === null) return '';
   let digits = String(rawPhone).replace(/\D/g, '');
   if (digits.startsWith('0')) {
     digits = '62' + digits.slice(1);
@@ -28,7 +28,7 @@ export function formatOrderDateTime(isoString?: string): string {
   if (!isoString) return '-';
   try {
     const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
+    if (isNaN(d.getTime())) return String(isoString);
     return d.toLocaleDateString('id-ID', {
       weekday: 'long',
       year: 'numeric',
@@ -38,7 +38,7 @@ export function formatOrderDateTime(isoString?: string): string {
       minute: '2-digit'
     });
   } catch {
-    return isoString;
+    return String(isoString);
   }
 }
 
@@ -48,27 +48,223 @@ export function formatOrderDateTime(isoString?: string): string {
 export function findCustomerPhone(order: Order, users?: User[]): string {
   if (users && users.length > 0) {
     const matchedUser = users.find((u) => {
-      const uPhone = String(u.NoWA || '').replace(/\D/g, '');
-      const ordPhone = String(order.NoCustomer || '').replace(/\D/g, '');
+      const uPhone = String(u.NoWA ?? '').replace(/\D/g, '');
+      const ordPhone = String(order.NoCustomer ?? '').replace(/\D/g, '');
       const matchPhone = ordPhone && uPhone && (uPhone.endsWith(ordPhone) || ordPhone.endsWith(uPhone));
       const matchCode =
         u.KodeKhusus &&
         order.KodeCustomer &&
-        u.KodeKhusus !== '-' &&
+        String(u.KodeKhusus).trim() !== '-' &&
         String(u.KodeKhusus).trim() === String(order.KodeCustomer).trim();
       const matchName =
         u.Nama &&
         order.NamaCustomer &&
-        u.Nama.trim().toLowerCase() === order.NamaCustomer.trim().toLowerCase();
+        String(u.Nama).trim().toLowerCase() === String(order.NamaCustomer).trim().toLowerCase();
       return matchPhone || matchCode || matchName;
     });
 
     if (matchedUser?.NoWA) {
-      return matchedUser.NoWA;
+      return String(matchedUser.NoWA);
     }
   }
 
-  return order.NoCustomer || '';
+  return String(order.NoCustomer || '');
+}
+
+/**
+ * Utilitas untuk menguraikan dan menjamin ketersediaan daftar rincian item pesanan (OrderItem[]).
+ * Mengambil dari:
+ * 1. order.Items jika sudah ada (baik array murni maupun JSON string)
+ * 2. Mengambil dari daftar allOrderItems (Sheet OrderItems) jika dicocokkan dengan order.ID
+ * 3. Mengurai rincian teks multi-item di order.NamaProduk jika terdapat pemisah ';' atau penomoran
+ * 4. Menghasilkan single item dari data kolom sheet Orders (IDProduk, NamaProduk, Kategori, Qty, Ukuran, Finishing, dll)
+ */
+export function getOrderDisplayItems(order: Order, allOrderItems?: any[]): OrderItem[] {
+  if (!order) return [];
+
+  // 1. Jika order.Items ada (baik array murni maupun JSON string)
+  if (order.Items) {
+    let itemsArr: any[] = [];
+    if (Array.isArray(order.Items)) {
+      itemsArr = order.Items;
+    } else if (typeof order.Items === 'string') {
+      try {
+        const parsed = JSON.parse(order.Items);
+        if (Array.isArray(parsed)) itemsArr = parsed;
+      } catch {
+        // Abaikan parse error, lanjutkan fallback
+      }
+    }
+
+    if (itemsArr.length > 0) {
+      return itemsArr.map((it, idx) => {
+        const qty = Math.max(1, Number(it.qty || it.Qty || 1));
+        const subtotal = Number(it.subtotal || it.Subtotal || 0);
+        const harga = Number(it.harga || it.Harga || (qty > 0 && subtotal > 0 ? Math.round(subtotal / qty) : 0));
+        const panjang = Number(it.panjang || it.Panjang || 0);
+        const lebar = Number(it.lebar || it.Lebar || 0);
+        const kategori = (it.kategori === 'meteran' || it.Kategori === 'meteran' || (panjang > 0 && lebar > 0)) ? 'meteran' : 'satuan';
+
+        return {
+          id: String(it.id || `${order.ID || 'ord'}_item_${idx + 1}`),
+          productId: String(it.productId || it.IDProduk || `PROD-${idx + 1}`),
+          namaProduk: String(it.namaProduk || it.NamaProduk || 'Produk Cetak'),
+          kategori,
+          harga,
+          qty,
+          panjang,
+          lebar,
+          finishing: String(it.finishing || it.Finishing || '-'),
+          withDesain: !!(it.withDesain || it.jasaDesain || it.Desain),
+          withCutting: !!(it.withCutting || it.jasaCutting || it.Cutting),
+          withLaminating: !!(it.withLaminating || it.jasaLaminating || it.Laminating),
+          jasaDesain: Number(it.jasaDesain || it.Desain || 0),
+          jasaCutting: Number(it.jasaCutting || it.Cutting || 0),
+          jasaLaminating: Number(it.jasaLaminating || it.Laminating || 0),
+          subtotal: subtotal || (harga * qty)
+        };
+      });
+    }
+  }
+
+  // 2. Jika ada allOrderItems (misal diambil dari Sheet OrderItems)
+  if (allOrderItems && Array.isArray(allOrderItems) && allOrderItems.length > 0) {
+    const orderIdStr = String(order.ID || '').trim().toLowerCase();
+    const matched = allOrderItems.filter((it: any) => {
+      const itOrdId = String(it.IDOrder || it.idorder || it.idOrder || it.ID || it.id || '').trim().toLowerCase();
+      return itOrdId && itOrdId === orderIdStr;
+    });
+
+    if (matched.length > 0) {
+      return matched.map((it: any, idx: number) => {
+        const qty = Math.max(1, Number(it.qty || it.Qty || 1));
+        const subtotal = Number(it.subtotal || it.Subtotal || 0);
+        const harga = Number(it.harga || it.Harga || (qty > 0 && subtotal > 0 ? Math.round(subtotal / qty) : 0));
+        const panjang = Number(it.panjang || it.Panjang || 0);
+        const lebar = Number(it.lebar || it.Lebar || 0);
+        const kategori = (it.kategori === 'meteran' || it.Kategori === 'meteran' || (panjang > 0 && lebar > 0)) ? 'meteran' : 'satuan';
+
+        return {
+          id: String(it.id || `${order.ID || 'ord'}_sheetitem_${idx + 1}`),
+          productId: String(it.productId || it.IDProduk || it.idProduk || `PROD-${idx + 1}`),
+          namaProduk: String(it.namaProduk || it.NamaProduk || 'Produk Cetak'),
+          kategori,
+          harga,
+          qty,
+          panjang,
+          lebar,
+          finishing: String(it.finishing || it.Finishing || '-'),
+          withDesain: !!(it.withDesain || it.jasaDesain || it.Desain),
+          withCutting: !!(it.withCutting || it.jasaCutting || it.Cutting),
+          withLaminating: !!(it.withLaminating || it.jasaLaminating || it.Laminating),
+          jasaDesain: Number(it.jasaDesain || it.Desain || 0),
+          jasaCutting: Number(it.jasaCutting || it.Cutting || 0),
+          jasaLaminating: Number(it.jasaLaminating || it.Laminating || 0),
+          subtotal: subtotal || (harga * qty)
+        };
+      });
+    }
+  }
+
+  // 2. Jika order.NamaProduk mengandung pemisah multi-item ';' atau penomoran '1. ...'
+  const rawTitle = String(order.NamaProduk || '').trim();
+  if (rawTitle.includes(';') || /^\s*1\.\s+/.test(rawTitle)) {
+    const rawSegments = rawTitle.includes(';')
+      ? rawTitle.split(';')
+      : rawTitle.split(/\n+/);
+
+    const parsedItems: OrderItem[] = [];
+    rawSegments.forEach((seg, idx) => {
+      const trimmed = seg.trim();
+      if (!trimmed) return;
+
+      // Bersihkan penomoran di depan: '1. ', '2. ', dsb
+      const cleanSeg = trimmed.replace(/^\d+[\.\)]\s*/, '');
+
+      // Deteksi Qty: e.g. (2x) atau 2 pcs atau (2)
+      let detectedQty = 1;
+      const qtyMatch = cleanSeg.match(/\((\d+)\s*x?\)/i) || cleanSeg.match(/\b(\d+)\s*(?:pcs|x)\b/i);
+      if (qtyMatch) {
+        detectedQty = Math.max(1, parseInt(qtyMatch[1], 10));
+      }
+
+      // Deteksi Ukuran: e.g. 200x100cm atau 200 x 100 cm
+      let panjang = 0;
+      let lebar = 0;
+      const sizeMatch = cleanSeg.match(/(\d+)\s*[xX*]\s*(\d+)\s*(?:cm|m)?/);
+      if (sizeMatch) {
+        panjang = parseInt(sizeMatch[1], 10);
+        lebar = parseInt(sizeMatch[2], 10);
+      }
+
+      // Deteksi Finishing: e.g. (Simkel) atau Finishing Simkel
+      let finishing = '-';
+      const finishMatch = cleanSeg.match(/(?:simkel|siming|sibah|kolong|mata\s*ayam)/i);
+      if (finishMatch) {
+        finishing = finishMatch[0].trim();
+      }
+
+      // Bersihkan nama produk dari penanda tanda kurung
+      let cleanName = cleanSeg
+        .replace(/\(\d+\s*x?\)/gi, '')
+        .replace(/\d+\s*[xX*]\d+\s*(?:cm|m)?/gi, '')
+        .replace(/\((?:simkel|siming|sibah|kolong)[^)]*\)/gi, '')
+        .trim();
+
+      if (!cleanName) cleanName = `Item ${idx + 1}`;
+
+      parsedItems.push({
+        id: `${order.ID || 'ord'}_parsed_${idx + 1}`,
+        productId: `${order.IDProduk || 'MULTI'}_${idx + 1}`,
+        namaProduk: cleanName,
+        kategori: (panjang > 0 && lebar > 0) ? 'meteran' : (order.Kategori || 'satuan'),
+        harga: 0,
+        qty: detectedQty,
+        panjang,
+        lebar,
+        finishing,
+        subtotal: 0
+      });
+    });
+
+    if (parsedItems.length > 0) {
+      // Distribusikan total harga jika subtotal masih 0
+      const totalPieces = parsedItems.reduce((acc, it) => acc + it.qty, 0) || 1;
+      const unitPriceApprox = Math.round(Number(order.TotalHarga || 0) / totalPieces);
+      return parsedItems.map((it) => ({
+        ...it,
+        harga: unitPriceApprox,
+        subtotal: unitPriceApprox * it.qty
+      }));
+    }
+  }
+
+  // 3. Fallback: Bentuk 1 OrderItem resmi dari data kolom sheet Orders
+  const singleQty = Math.max(1, Number(order.Qty || 1));
+  const total = Number(order.TotalHarga || 0);
+  const jasaTotal = Number(order.JasaDesain || 0) + Number(order.JasaCutting || 0) + Number(order.JasaLaminating || 0);
+  const basePrice = singleQty > 0 ? Math.max(0, Math.round((total - jasaTotal) / singleQty)) : total;
+
+  return [
+    {
+      id: String(order.IDProduk || `${order.ID}_single`),
+      productId: String(order.IDProduk || 'P1'),
+      namaProduk: String(order.NamaProduk || 'Produk Cetak'),
+      kategori: (order.Kategori === 'meteran' ? 'meteran' : 'satuan'),
+      harga: basePrice,
+      qty: singleQty,
+      panjang: Number(order.Panjang || 0),
+      lebar: Number(order.Lebar || 0),
+      finishing: String(order.Finishing || '-'),
+      withDesain: Number(order.JasaDesain || 0) > 0,
+      withCutting: Number(order.JasaCutting || 0) > 0,
+      withLaminating: Number(order.JasaLaminating || 0) > 0,
+      jasaDesain: Number(order.JasaDesain || 0),
+      jasaCutting: Number(order.JasaCutting || 0),
+      jasaLaminating: Number(order.JasaLaminating || 0),
+      subtotal: total
+    }
+  ];
 }
 
 export interface WhatsAppFormatOptions {
@@ -88,41 +284,48 @@ function getStoreName(options?: WhatsAppFormatOptions | StoreData): string {
 
 function getRekening(options?: WhatsAppFormatOptions | StoreData): string {
   if (!options) return '';
-  if ('bank_accounts' in options && Array.isArray((options as any).bank_accounts) && (options as any).bank_accounts.length > 0) {
-    const list = (options as any).bank_accounts;
-    return list.map((b: any) => `• ${b.bank}: *${b.nomor}* (a.n ${b.atasNama})`).join('\n');
+  let accounts: any[] = [];
+  if ('bank_accounts' in options && options.bank_accounts) {
+    if (Array.isArray(options.bank_accounts)) {
+      accounts = options.bank_accounts;
+    } else if (typeof options.bank_accounts === 'string') {
+      try {
+        const parsed = JSON.parse(options.bank_accounts);
+        if (Array.isArray(parsed)) accounts = parsed;
+      } catch {
+        // ignore
+      }
+    }
   }
-  if ('rekening' in options && options.rekening) return options.rekening;
+
+  if (accounts.length > 0) {
+    return accounts.map((b: any) => `• ${b.bank}: *${b.nomor}* (a.n ${b.atasNama})`).join('\n');
+  }
+
+  if ('rekening' in options && options.rekening) return String(options.rekening);
   return '';
 }
 
 /**
  * Utilitas untuk memformat pesan WhatsApp konfirmasi pesanan / nota dari Toko/Admin ke Pelanggan.
- * Menyertakan:
- * - ID Order
- * - Tanggal & Info Pelanggan
- * - Rincian Order (Detail tiap item/produk, ukuran, finishing, layanan jasa)
- * - Total Biaya
- * - DP (Uang Muka) jika ada
- * - Sisa Tagihan
- * - Status Pembayaran & Pengerjaan
  */
 export function formatOrderWhatsAppConfirmation(
   order: Order,
-  options?: WhatsAppFormatOptions | StoreData
+  options?: WhatsAppFormatOptions | StoreData,
+  allOrderItems?: any[]
 ): string {
   const storeName = getStoreName(options);
   const rekening = getRekening(options);
-  const dpAmount = order.NominalDP || order.DP || 0;
+  const dpAmount = Number(order.NominalDP || order.DP || 0);
   const sisaTagihan =
     order.SisaTagihan !== undefined
-      ? order.SisaTagihan
-      : Math.max(0, order.TotalHarga - dpAmount);
+      ? Number(order.SisaTagihan)
+      : Math.max(0, Number(order.TotalHarga || 0) - dpAmount);
 
   const lines: string[] = [];
 
   // Header Salam
-  lines.push(`Halo Kak *${order.NamaCustomer}*,`);
+  lines.push(`Halo Kak *${order.NamaCustomer || 'Customer'}*,`);
   lines.push(`Berikut adalah konfirmasi & rincian nota pesanan Anda di *${storeName}*:`);
   lines.push('');
 
@@ -132,54 +335,35 @@ export function formatOrderWhatsAppConfirmation(
   lines.push(`👤 *Pelanggan:* ${order.NamaCustomer} ${order.KodeCustomer && order.KodeCustomer !== '-' ? `(ID: ${order.KodeCustomer})` : ''}`);
   lines.push('');
 
-  // 2. Rincian Order
-  lines.push(`📋 *RINCIAN PRODUK PESANAN:*`);
-  if (order.Items && order.Items.length > 0) {
-    order.Items.forEach((item, idx) => {
-      lines.push(`${idx + 1}. *${item.namaProduk}*`);
-      lines.push(`   • Qty: *${item.qty} pcs* (${formatRupiah(item.harga)}/item)`);
-      if (item.kategori === 'meteran') {
-        const p = item.panjang || 0;
-        const l = item.lebar || 0;
-        const luas = Math.max(1, (p / 100) * (l / 100));
-        lines.push(`   • Ukuran: ${p} x ${l} cm (${luas.toFixed(2)} m²) • Finishing: ${item.finishing || 'Simkel'}`);
-      }
-      const jasaArr: string[] = [];
-      if (item.withDesain && (item.jasaDesain || 0) > 0) {
-        jasaArr.push(`Desain: +${formatRupiah(item.jasaDesain!)}`);
-      }
-      if (item.withCutting && (item.jasaCutting || 0) > 0) {
-        jasaArr.push(`Cutting: +${formatRupiah(item.jasaCutting!)}`);
-      }
-      if (item.withLaminating && (item.jasaLaminating || 0) > 0) {
-        jasaArr.push(`Laminasi: +${formatRupiah(item.jasaLaminating!)}`);
-      }
-      if (jasaArr.length > 0) {
-        lines.push(`   • Layanan: ${jasaArr.join(', ')}`);
-      }
-      lines.push(`   • Subtotal Produk: *${formatRupiah(item.subtotal)}*`);
-      lines.push('');
-    });
-  } else {
-    // Single Product Order
-    lines.push(`1. *${order.NamaProduk}*`);
-    lines.push(`   • Qty: *${order.Qty} pcs*`);
-    if (order.Kategori === 'meteran') {
-      const p = order.Panjang || 0;
-      const l = order.Lebar || 0;
+  // 2. Rincian Order (Mendukung Satuan maupun Multi-Item dengan getOrderDisplayItems)
+  const displayItems = getOrderDisplayItems(order, allOrderItems);
+  lines.push(`📋 *RINCIAN PRODUK PESANAN (${displayItems.length} Item):*`);
+
+  displayItems.forEach((item, idx) => {
+    lines.push(`${idx + 1}. *${item.namaProduk}*`);
+    lines.push(`   • Qty: *${item.qty} pcs* (${formatRupiah(item.harga)}/item)`);
+    if (item.kategori === 'meteran' && item.panjang && item.lebar) {
+      const p = item.panjang || 0;
+      const l = item.lebar || 0;
       const luas = Math.max(1, (p / 100) * (l / 100));
-      lines.push(`   • Ukuran: ${p} x ${l} cm (${luas.toFixed(2)} m²) • Finishing: ${order.Finishing || 'Tanpa Finishing'}`);
+      lines.push(`   • Ukuran: ${p} x ${l} cm (${luas.toFixed(2)} m²) • Finishing: ${item.finishing || 'Simkel'}`);
     }
     const jasaArr: string[] = [];
-    if ((order.JasaDesain || 0) > 0) jasaArr.push(`Desain: +${formatRupiah(order.JasaDesain)}`);
-    if ((order.JasaCutting || 0) > 0) jasaArr.push(`Cutting: +${formatRupiah(order.JasaCutting)}`);
-    if ((order.JasaLaminating || 0) > 0) jasaArr.push(`Laminasi: +${formatRupiah(order.JasaLaminating)}`);
+    if (item.withDesain && (item.jasaDesain || 0) > 0) {
+      jasaArr.push(`Desain: +${formatRupiah(item.jasaDesain!)}`);
+    }
+    if (item.withCutting && (item.jasaCutting || 0) > 0) {
+      jasaArr.push(`Cutting: +${formatRupiah(item.jasaCutting!)}`);
+    }
+    if (item.withLaminating && (item.jasaLaminating || 0) > 0) {
+      jasaArr.push(`Laminasi: +${formatRupiah(item.jasaLaminating!)}`);
+    }
     if (jasaArr.length > 0) {
       lines.push(`   • Layanan: ${jasaArr.join(', ')}`);
     }
-    lines.push(`   • Subtotal: *${formatRupiah(order.TotalHarga)}*`);
+    lines.push(`   • Subtotal Produk: *${formatRupiah(item.subtotal)}*`);
     lines.push('');
-  }
+  });
 
   if (order.Catatan) {
     lines.push(`📝 *Catatan Khusus:* ${order.Catatan}`);
@@ -193,15 +377,15 @@ export function formatOrderWhatsAppConfirmation(
     lines.push(`• Uang Muka (DP): *${formatRupiah(dpAmount)}*`);
   }
   lines.push(`• Sisa Tagihan: *${formatRupiah(sisaTagihan)}*`);
-  lines.push(`• Status Bayar: *${order.StatusBayar}*`);
-  lines.push(`• Status Pengerjaan: *${order.StatusOrder}*`);
+  lines.push(`• Status Bayar: *${order.StatusBayar || 'Belum Lunas'}*`);
+  lines.push(`• Status Produksi: *${order.StatusOrder || 'Order Masuk'}*`);
   lines.push('');
 
-  // 4. Informasi Tambahan Berdasarkan Status
+  // Catatan Status Pengerjaan
   if (order.StatusOrder === 'Selesai') {
-    lines.push(`🎉 *Hore! Pesanan Anda telah SELESAI dan siap diambil atau dikirim.*`);
+    lines.push(`✅ *Pesanan Anda telah selesai diproduksi dan siap diambil/dikirim.*`);
   } else if (order.StatusOrder === 'Proses') {
-    lines.push(`⚙️ *Pesanan Anda saat ini sedang dalam proses produksi / pengerjaan.*`);
+    lines.push(`⚙️ *Pesanan Anda sedang dalam proses pengerjaan produksi.*`);
   } else {
     lines.push(`⏳ *Pesanan Anda telah diterima dalam antrean sistem.*`);
   }
@@ -224,62 +408,57 @@ export function formatOrderWhatsAppConfirmation(
  */
 export function formatCustomerToAdminWhatsAppConfirmation(
   order: Order,
-  options?: WhatsAppFormatOptions | StoreData
+  options?: WhatsAppFormatOptions | StoreData,
+  allOrderItems?: any[]
 ): string {
   const storeName = getStoreName(options);
-  const dpAmount = order.NominalDP || order.DP || 0;
+  const dpAmount = Number(order.NominalDP || order.DP || 0);
   const sisaTagihan =
     order.SisaTagihan !== undefined
-      ? order.SisaTagihan
-      : Math.max(0, order.TotalHarga - dpAmount);
+      ? Number(order.SisaTagihan)
+      : Math.max(0, Number(order.TotalHarga || 0) - dpAmount);
 
   const lines: string[] = [];
-  lines.push(`Halo admin *${storeName}*, saya ingin konfirmasi pesanan saya:`);
+
+  lines.push(`Halo Admin *${storeName}*,`);
+  lines.push(`Saya ingin mengonfirmasi pesanan saya dengan rincian berikut:`);
   lines.push('');
-  lines.push(`📌 *ID Pesanan:* ${order.ID}`);
+  lines.push(`📄 *ID Order:* ${order.ID}`);
   lines.push(`🗓️ *Tanggal:* ${formatOrderDateTime(order.Tgl)}`);
-  lines.push(`👤 *Nama:* ${order.NamaCustomer} ${order.KodeCustomer && order.KodeCustomer !== '-' ? `(ID: ${order.KodeCustomer})` : ''}`);
+  lines.push(`👤 *Nama Customer:* ${order.NamaCustomer} ${order.KodeCustomer && order.KodeCustomer !== '-' ? `(${order.KodeCustomer})` : ''}`);
   lines.push('');
 
-  // Rincian Order
-  lines.push(`📦 *Rincian Order:*`);
-  if (order.Items && order.Items.length > 0) {
-    order.Items.forEach((it, idx) => {
-      lines.push(`${idx + 1}. ${it.namaProduk} (${it.qty}x)`);
-      if (it.kategori === 'meteran') {
-        lines.push(`   Ukuran: ${it.panjang || 0} x ${it.lebar || 0} cm (${it.finishing || 'Simkel'})`);
-      }
-    });
-  } else {
-    lines.push(`• ${order.NamaProduk} (${order.Qty}x)`);
-    if (order.Kategori === 'meteran') {
-      lines.push(`  Ukuran: ${order.Panjang || 0} x ${order.Lebar || 0} cm (${order.Finishing || 'Simkel'})`);
+  const displayItems = getOrderDisplayItems(order, allOrderItems);
+  lines.push(`📋 *Rincian Produk (${displayItems.length} Item):*`);
+  displayItems.forEach((it, idx) => {
+    lines.push(`${idx + 1}. *${it.namaProduk}* (${it.qty} pcs)`);
+    if (it.kategori === 'meteran' && it.panjang && it.lebar) {
+      lines.push(`   Ukuran: ${it.panjang}x${it.lebar} cm - Finishing: ${it.finishing || 'Simkel'}`);
     }
-  }
-  lines.push('');
+  });
 
-  // Tagihan & DP
-  lines.push(`💰 *Total:* ${formatRupiah(order.TotalHarga)}`);
+  lines.push('');
+  lines.push(`💰 *Total Biaya:* ${formatRupiah(order.TotalHarga)}`);
   if (dpAmount > 0) {
-    lines.push(`💵 *DP:* ${formatRupiah(dpAmount)}`);
+    lines.push(`💵 *DP:* ${formatRupiah(dpAmount)} (Sisa: ${formatRupiah(sisaTagihan)})`);
   }
-  lines.push(`💳 *Sisa Tagihan:* ${formatRupiah(sisaTagihan)}`);
-  lines.push(`🏷️ *Status Bayar:* ${order.StatusBayar}`);
-  lines.push(`🚀 *Status Order:* ${order.StatusOrder}`);
+  lines.push(`📌 *Status Bayar:* ${order.StatusBayar || 'Belum Lunas'}`);
+
   if (order.Catatan) {
     lines.push(`📝 *Catatan:* ${order.Catatan}`);
   }
+
   lines.push('');
-  lines.push(`Mohon konfirmasi pesanan dan informasi pengerjaannya. Terima kasih!`);
+  lines.push(`Mohon info lebih lanjut terkait proses dan estimasi selesai. Terima kasih! 🙏`);
 
   return lines.join('\n');
 }
 
 /**
- * Menghasilkan link WhatsApp lengkap wa.me dengan pesan terenkripsi URI
+ * Membentuk URL wa.me yang aman untuk diklik
  */
-export function createWhatsAppUrl(phone: string, message: string): string {
+export function createWhatsAppUrl(phone: string, text: string): string {
   const cleanPhone = cleanWhatsAppPhone(phone);
-  const encodedText = encodeURIComponent(message);
+  const encodedText = encodeURIComponent(text);
   return `https://wa.me/${cleanPhone}?text=${encodedText}`;
 }

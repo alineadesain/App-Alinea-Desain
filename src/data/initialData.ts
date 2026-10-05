@@ -335,6 +335,7 @@ export interface AppStateData {
   orders: Order[];
   expenses: Expense[];
   storeData: StoreData;
+  orderItems?: any[];
 }
 
 export function loadStoredData(): AppStateData {
@@ -426,7 +427,8 @@ export function loadStoredData(): AppStateData {
       products: uniqueProducts.length > 0 ? uniqueProducts : DEFAULT_PRODUCTS,
       orders: parsed.orders || DEFAULT_ORDERS,
       expenses: parsed.expenses || DEFAULT_EXPENSES,
-      storeData: mergedStoreData
+      storeData: mergedStoreData,
+      orderItems: parsed.orderItems || []
     };
   } catch (e) {
     console.error('Error loading stored data:', e);
