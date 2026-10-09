@@ -12,6 +12,7 @@ import {
   Layers,
   Palette
 } from 'lucide-react';
+import { ImageUploader } from './ImageUploader';
 
 interface AdminBannerManagerProps {
   banners: BannerSlide[];
@@ -227,14 +228,14 @@ export const AdminBannerManager: React.FC<AdminBannerManagerProps> = ({
                 className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
               />
             </div>
-            <div>
-              <label className="font-bold text-slate-700 block mb-1">URL Gambar Latar (Opsional)</label>
-              <input
-                type="url"
+            <div className="col-span-2">
+              <ImageUploader
                 value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="https://..."
-                className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+                onChange={setImageUrl}
+                label="Foto / Gambar Latar Banner (Opsional)"
+                description="Upload gambar PNG, JPG, atau WEBP sebagai latar belakang promo"
+                placeholderText="Upload gambar latar banner (PNG, JPG, WEBP)"
+                aspectRatio="banner"
               />
             </div>
           </div>

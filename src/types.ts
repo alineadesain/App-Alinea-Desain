@@ -37,9 +37,13 @@ export interface OrderItem {
   withDesain?: boolean;
   withCutting?: boolean;
   withLaminating?: boolean;
+  withJasaLain?: boolean;
+  namaJasaLain?: string;
   jasaDesain?: number;
   jasaCutting?: number;
   jasaLaminating?: number;
+  jasaLain?: number;
+  customHarga?: number;
   subtotal: number;
 }
 
@@ -59,6 +63,9 @@ export interface Order {
   JasaCutting: number;
   JasaLaminating: number;
   JasaDesain: number;
+  JasaLain?: number;
+  NamaJasaLain?: string;
+  FileDesain?: string;
   TotalHarga: number;
   NominalDP?: number;
   DP?: number;

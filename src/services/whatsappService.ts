@@ -198,7 +198,15 @@ export async function sendOrderCreatedNotification(
   const sisaRp = formatRupiah(Math.max(0, (order.TotalHarga || 0) - (order.DP || 0)));
 
   const displayItems = getOrderDisplayItems(order);
-  const itemsText = displayItems.map((it, idx) => `  ${idx + 1}. *${it.namaProduk}* (${it.qty}x) - Rp ${formatRupiah(it.subtotal)}`).join('\n');
+  const itemsText = displayItems.map((it, idx) => {
+    const services: string[] = [];
+    if (it.withDesain && (it.jasaDesain || 0) > 0) services.push(`Desain +Rp ${formatRupiah(it.jasaDesain!)}`);
+    if (it.withCutting && (it.jasaCutting || 0) > 0) services.push(`Cutting +Rp ${formatRupiah(it.jasaCutting!)}`);
+    if (it.withLaminating && (it.jasaLaminating || 0) > 0) services.push(`Laminasi +Rp ${formatRupiah(it.jasaLaminating!)}`);
+    if ((it.withJasaLain || (it.jasaLain || 0) > 0)) services.push(`${it.namaJasaLain || 'Jasa Lain'} +Rp ${formatRupiah(it.jasaLain || 0)}`);
+    const serviceSuffix = services.length > 0 ? `\n     ↳ Layanan: ${services.join(', ')}` : '';
+    return `  ${idx + 1}. *${it.namaProduk}* (${it.qty}x) - Rp ${formatRupiah(it.subtotal)}${serviceSuffix}`;
+  }).join('\n');
 
   const formattedDate = order.Tgl
     ? new Date(order.Tgl).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })

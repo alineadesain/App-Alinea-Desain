@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product } from '../types';
 import { X, Boxes, Image, Sparkles, Check } from 'lucide-react';
+import { ImageUploader } from './ImageUploader';
 
 interface AdminAddProductModalProps {
   isOpen: boolean;
@@ -28,14 +29,14 @@ export const AdminAddProductModal: React.FC<AdminAddProductModalProps> = ({
 
   const [nama, setNama] = useState(initialProduct?.Nama || '');
   const [kategori, setKategori] = useState<'meteran' | 'satuan'>(initialProduct?.Kategori || 'meteran');
-  const [harga, setHarga] = useState(initialProduct?.Harga ? String(initialProduct.Harga) : '25000');
+  const [harga, setHarga] = useState(initialProduct?.Harga !== undefined ? String(initialProduct.Harga) : '25000');
   const [deskripsi, setDeskripsi] = useState(initialProduct?.Deskripsi || '');
   const [thumbnail, setThumbnail] = useState(
     initialProduct?.Thumbnail || 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=400&auto=format&fit=crop&q=80'
   );
-  const [hargaDesain, setHargaDesain] = useState(initialProduct?.HargaDesain ? String(initialProduct.HargaDesain) : '15000');
-  const [hargaCutting, setHargaCutting] = useState(initialProduct?.HargaCutting ? String(initialProduct.HargaCutting) : '0');
-  const [hargaLaminating, setHargaLaminating] = useState(initialProduct?.HargaLaminating ? String(initialProduct.HargaLaminating) : '0');
+  const [hargaDesain, setHargaDesain] = useState(initialProduct?.HargaDesain !== undefined ? String(initialProduct.HargaDesain) : '15000');
+  const [hargaCutting, setHargaCutting] = useState(initialProduct?.HargaCutting !== undefined ? String(initialProduct.HargaCutting) : '0');
+  const [hargaLaminating, setHargaLaminating] = useState(initialProduct?.HargaLaminating !== undefined ? String(initialProduct.HargaLaminating) : '0');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,11 +44,7 @@ export const AdminAddProductModal: React.FC<AdminAddProductModalProps> = ({
       alert('Nama produk tidak boleh kosong!');
       return;
     }
-    const hargaNum = parseInt(harga, 10) || 0;
-    if (hargaNum <= 0) {
-      alert('Harga produk harus lebih dari 0!');
-      return;
-    }
+    const hargaNum = Math.max(1, Math.round(Number(harga) || 1));
 
     const productData: Product = {
       ID: initialProduct?.ID || 'P' + Date.now(),
@@ -57,9 +54,9 @@ export const AdminAddProductModal: React.FC<AdminAddProductModalProps> = ({
       Deskripsi: deskripsi.trim() || `${kategori === 'meteran' ? 'Cetak bahan outdoor/indoor meteran berkualitas' : 'Cetak satuan presisi siap kirim'}`,
       Thumbnail: thumbnail.trim() || 'https://placehold.co/400x300?text=Produk',
       Terjual: initialProduct?.Terjual || 0,
-      HargaDesain: parseInt(hargaDesain, 10) || 0,
-      HargaCutting: parseInt(hargaCutting, 10) || 0,
-      HargaLaminating: parseInt(hargaLaminating, 10) || 0
+      HargaDesain: Math.max(0, Math.round(Number(hargaDesain) || 0)),
+      HargaCutting: Math.max(0, Math.round(Number(hargaCutting) || 0)),
+      HargaLaminating: Math.max(0, Math.round(Number(hargaLaminating) || 0))
     };
 
     onSave(productData);
@@ -138,8 +135,8 @@ export const AdminAddProductModal: React.FC<AdminAddProductModalProps> = ({
                 <input
                   type="number"
                   required
-                  min="500"
-                  step="500"
+                  min="1"
+                  step="1"
                   value={harga}
                   onChange={(e) => setHarga(e.target.value)}
                   placeholder="25000"
@@ -166,55 +163,24 @@ export const AdminAddProductModal: React.FC<AdminAddProductModalProps> = ({
             />
           </div>
 
-          {/* URL Gambar & Presets */}
-          <div className="space-y-1.5">
-            <label className="font-bold text-slate-700 flex items-center justify-between">
-              <span>URL Foto / Thumbnail Produk</span>
-              <span className="text-[10px] text-teal-700 font-normal">Pilih Preset di Bawah:</span>
-            </label>
-            <div className="flex gap-2 items-center">
-              <input
-                type="url"
-                value={thumbnail}
-                onChange={(e) => setThumbnail(e.target.value)}
-                placeholder="https://..."
-                className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-[11px] focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
-              <img
-                src={thumbnail}
-                alt="Preview"
-                className="w-9 h-9 rounded-lg object-cover border border-slate-200 bg-slate-100 flex-shrink-0"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = 'https://placehold.co/100x100?text=Foto';
-                }}
-              />
-            </div>
-
-            {/* Presets chips */}
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {PRESET_IMAGES.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => setThumbnail(p.url)}
-                  className={`text-[10px] px-2 py-0.5 rounded-lg border transition ${
-                    thumbnail === p.url
-                      ? 'bg-teal-700 text-white border-teal-700'
-                      : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+          {/* Upload Foto Produk / Presets */}
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <ImageUploader
+              value={thumbnail}
+              onChange={setThumbnail}
+              label="Foto / Thumbnail Produk"
+              description="Pilih file gambar dari galeri/komputer atau pilih preset"
+              placeholderText="Upload file foto produk (PNG, JPG, WEBP)"
+              aspectRatio="video"
+              presets={PRESET_IMAGES}
+            />
           </div>
 
           {/* Pengaturan Jasa Bawaan */}
           <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-2">
             <div className="font-bold text-[11px] text-slate-600 uppercase tracking-wider border-b border-slate-200 pb-1 flex items-center justify-between">
               <span>Tarif Jasa Tambahan Produk Ini</span>
-              <span className="text-[9px] text-slate-400 font-normal">Opsional saat customer order</span>
+              <span className="text-[9px] text-slate-400 font-normal">Mendukung angka terkecil 1 rupiah</span>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -224,7 +190,8 @@ export const AdminAddProductModal: React.FC<AdminAddProductModalProps> = ({
                 </label>
                 <input
                   type="number"
-                  step="1000"
+                  min="0"
+                  step="1"
                   value={hargaDesain}
                   onChange={(e) => setHargaDesain(e.target.value)}
                   className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-center font-bold"
@@ -236,7 +203,8 @@ export const AdminAddProductModal: React.FC<AdminAddProductModalProps> = ({
                 </label>
                 <input
                   type="number"
-                  step="1000"
+                  min="0"
+                  step="1"
                   value={hargaCutting}
                   onChange={(e) => setHargaCutting(e.target.value)}
                   className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-center font-bold"
@@ -248,7 +216,8 @@ export const AdminAddProductModal: React.FC<AdminAddProductModalProps> = ({
                 </label>
                 <input
                   type="number"
-                  step="1000"
+                  min="0"
+                  step="1"
                   value={hargaLaminating}
                   onChange={(e) => setHargaLaminating(e.target.value)}
                   className="w-full p-1.5 bg-white border border-slate-200 rounded-lg text-center font-bold"

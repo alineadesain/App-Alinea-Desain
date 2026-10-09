@@ -11,6 +11,7 @@ import {
   BadgeCheck
 } from 'lucide-react';
 import { StoreData } from '../types';
+import { ImageUploader } from './ImageUploader';
 
 interface AdminStoreBrandingManagerProps {
   storeData: StoreData;
@@ -186,78 +187,27 @@ export const AdminStoreBrandingManager: React.FC<AdminStoreBrandingManagerProps>
           />
         </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="font-bold text-slate-700 flex items-center gap-1.5">
-              <Image className="w-3.5 h-3.5 text-teal-600" />
-              <span>URL Logo Toko</span>
-            </label>
-            {logoUrl && (
-              <button
-                type="button"
-                onClick={() => setLogoUrl('')}
-                className="text-[10px] text-rose-600 hover:underline"
-              >
-                Hapus Logo
-              </button>
-            )}
-          </div>
-          <input
-            type="url"
+        {/* Upload Logo Toko (PNG, JPG, WEBP) */}
+        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+          <ImageUploader
             value={logoUrl}
-            onChange={(e) => {
-              setLogoUrl(e.target.value);
+            onChange={(url) => {
+              setLogoUrl(url);
               setImgError(false);
             }}
-            placeholder="https://... (URL gambar logo PNG / JPG / WebP)"
-            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-teal-500"
+            label="Logo Toko / Percetakan"
+            description="Upload logo berformat PNG (transparan), JPG, atau WEBP"
+            placeholderText="Upload file logo toko (PNG, JPG, WEBP)"
+            aspectRatio="square"
+            maxWidth={512}
+            maxHeight={512}
+            presets={PRESET_LOGOS.map((p) => ({ label: p.name, url: p.url }))}
           />
-          <p className="text-[10px] text-slate-400 mt-1">
-            Kosongkan jika ingin menggunakan badge inisial logo default otomatis.
-          </p>
-        </div>
-
-        {/* Pilihan Preset Logo */}
-        <div className="space-y-2 pt-1">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-            Atau Pilih dari Preset Logo Rekomendasi:
-          </span>
-          <div className="grid grid-cols-2 gap-2">
-            {PRESET_LOGOS.map((preset) => (
-              <button
-                key={preset.name}
-                type="button"
-                onClick={() => {
-                  setLogoUrl(preset.url);
-                  setImgError(false);
-                }}
-                className={`p-2 rounded-xl border text-left transition flex items-center gap-2 ${
-                  logoUrl === preset.url
-                    ? 'border-teal-500 bg-teal-50/80'
-                    : 'border-slate-200 hover:border-teal-300 bg-slate-50/60'
-                }`}
-              >
-                <img
-                  src={preset.url}
-                  alt={preset.name}
-                  className="w-8 h-8 rounded-lg object-cover border border-slate-200"
-                />
-                <div className="overflow-hidden">
-                  <div className="font-bold text-[10px] text-slate-800 truncate">
-                    {preset.name}
-                  </div>
-                  <div className="text-[9px] text-slate-400 truncate">
-                    {preset.desc}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
         </div>
 
         <button
           type="submit"
-          className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 flex items-center justify-center gap-1.5"
+          className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
         >
           <Check className="w-3.5 h-3.5" />
           <span>Simpan Identitas & Logo Toko</span>

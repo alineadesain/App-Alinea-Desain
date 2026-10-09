@@ -345,7 +345,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       </div>
 
                       {/* Layanan Tambahan per Item */}
-                      {(item.withDesain || item.withCutting || item.withLaminating || (item.jasaDesain || 0) > 0 || (item.jasaCutting || 0) > 0 || (item.jasaLaminating || 0) > 0) && (
+                      {(item.withDesain || item.withCutting || item.withLaminating || item.withJasaLain || (item.jasaDesain || 0) > 0 || (item.jasaCutting || 0) > 0 || (item.jasaLaminating || 0) > 0 || (item.jasaLain || 0) > 0) && (
                         <div className="pt-1.5 border-t border-dashed border-slate-200 text-[10px] space-y-0.5 text-slate-500">
                           {(item.withDesain || (item.jasaDesain || 0) > 0) && (
                             <div className="flex justify-between">
@@ -363,6 +363,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                             <div className="flex justify-between">
                               <span>+ Jasa Laminating:</span>
                               <span className="font-semibold text-teal-700">{formatRp(item.jasaLaminating || 0)}</span>
+                            </div>
+                          )}
+                          {(item.withJasaLain || (item.jasaLain || 0) > 0) && (
+                            <div className="flex justify-between">
+                              <span>+ {item.namaJasaLain || 'Jasa Lain'}:</span>
+                              <span className="font-semibold text-teal-700">{formatRp(item.jasaLain || 0)}</span>
                             </div>
                           )}
                         </div>
@@ -417,6 +423,33 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 </h4>
                 <div className="bg-amber-50/70 border border-amber-200 p-3 rounded-2xl text-xs text-amber-900 leading-relaxed">
                   {order.Catatan}
+                </div>
+              </div>
+            )}
+
+            {/* Lampiran Desain / Gambar Referensi */}
+            {order.FileDesain && (
+              <div className="space-y-1">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
+                  Lampiran Desain / Foto (PNG, JPG, WEBP)
+                </h4>
+                <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-2xl flex items-center gap-3">
+                  <img
+                    src={order.FileDesain}
+                    alt="File Desain"
+                    className="w-16 h-16 object-cover rounded-xl border border-slate-200"
+                  />
+                  <div className="text-xs">
+                    <span className="font-bold text-slate-800 block">File Referensi Desain / Foto</span>
+                    <a
+                      href={order.FileDesain}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-teal-700 font-semibold hover:underline text-[11px]"
+                    >
+                      Buka Gambar Penuh ↗
+                    </a>
+                  </div>
                 </div>
               </div>
             )}
@@ -617,12 +650,13 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                         Ukuran: {item.panjang} x {item.lebar} cm ({itemLuas.toFixed(2)} m²) • Finishing: {item.finishing || 'Simkel'}
                       </div>
                     )}
-                    {(item.withDesain || item.withCutting || item.withLaminating || (item.jasaDesain || 0) > 0 || (item.jasaCutting || 0) > 0 || (item.jasaLaminating || 0) > 0) && (
+                    {(item.withDesain || item.withCutting || item.withLaminating || item.withJasaLain || (item.jasaDesain || 0) > 0 || (item.jasaCutting || 0) > 0 || (item.jasaLaminating || 0) > 0 || (item.jasaLain || 0) > 0) && (
                       <div className="text-[10px] text-gray-600 italic">
                         Layanan: {[
                           (item.withDesain || (item.jasaDesain || 0) > 0) ? `Desain (${formatRp(item.jasaDesain || 0)})` : '',
                           (item.withCutting || (item.jasaCutting || 0) > 0) ? `Cutting (${formatRp(item.jasaCutting || 0)})` : '',
-                          (item.withLaminating || (item.jasaLaminating || 0) > 0) ? `Laminasi (${formatRp(item.jasaLaminating || 0)})` : ''
+                          (item.withLaminating || (item.jasaLaminating || 0) > 0) ? `Laminasi (${formatRp(item.jasaLaminating || 0)})` : '',
+                          (item.withJasaLain || (item.jasaLain || 0) > 0) ? `${item.namaJasaLain || 'Jasa Lain'} (${formatRp(item.jasaLain || 0)})` : ''
                         ].filter(Boolean).join(', ')}
                       </div>
                     )}

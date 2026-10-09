@@ -13,6 +13,7 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 import { ClientPartner } from '../types';
+import { ImageUploader } from './ImageUploader';
 
 interface AdminTokoSliderManagerProps {
   clients: ClientPartner[];
@@ -239,31 +240,16 @@ export const AdminTokoSliderManager: React.FC<AdminTokoSliderManagerProps> = ({
             </div>
 
             <div className="sm:col-span-2">
-              <label className="font-bold text-slate-600 block mb-1">
-                URL Logo / Foto Instansi
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={formLogo}
-                  onChange={(e) => setFormLogo(e.target.value)}
-                  placeholder="https://... (URL gambar logo PNG / JPG)"
-                  className="flex-1 p-2.5 border rounded-xl bg-white focus:ring-2 focus:ring-teal-500 focus:outline-none font-mono text-xs"
-                />
-                {formLogo && (
-                  <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-200 bg-white flex-shrink-0 flex items-center justify-center p-0.5">
-                    <img
-                      src={formLogo}
-                      alt="Preview"
-                      className="w-full h-full object-cover rounded-lg"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
+              <ImageUploader
+                value={formLogo}
+                onChange={setFormLogo}
+                label="Logo / Foto Instansi"
+                description="Upload file logo PNG (transparan), JPG, atau WEBP"
+                placeholderText="Upload logo instansi (PNG, JPG, WEBP)"
+                aspectRatio="square"
+                maxWidth={400}
+                maxHeight={400}
+              />
             </div>
 
             <div className="sm:col-span-2">

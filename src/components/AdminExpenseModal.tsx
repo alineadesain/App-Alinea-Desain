@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Expense } from '../types';
 import { X, Receipt, DollarSign, Calendar, Store, FileText, Image, Check } from 'lucide-react';
+import { ImageUploader } from './ImageUploader';
 
 interface AdminExpenseModalProps {
   isOpen: boolean;
@@ -100,8 +101,8 @@ export const AdminExpenseModal: React.FC<AdminExpenseModalProps> = ({
             </label>
             <input
               type="number"
-              min="0"
-              step="1000"
+              min="1"
+              step="1"
               value={total}
               onChange={(e) => setTotal(e.target.value === '' ? '' : Number(e.target.value))}
               placeholder="Contoh: 150000"
@@ -148,17 +149,14 @@ export const AdminExpenseModal: React.FC<AdminExpenseModalProps> = ({
           </div>
 
           {/* URL Nota / Foto Bukti (Opsional) */}
-          <div>
-            <label className="font-bold text-slate-700 flex items-center gap-1.5 mb-1">
-              <Image className="w-3.5 h-3.5 text-rose-600" />
-              <span>Link Nota / Bukti Bayar (Opsional)</span>
-            </label>
-            <input
-              type="url"
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <ImageUploader
               value={notaUrl}
-              onChange={(e) => setNotaUrl(e.target.value)}
-              placeholder="https://drive.google.com/... atau link foto nota"
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              onChange={setNotaUrl}
+              label="Nota / Foto Bukti Bayar (Opsional)"
+              description="Upload foto nota berformat PNG, JPG, atau WEBP"
+              placeholderText="Upload foto nota pengeluaran (PNG, JPG, WEBP)"
+              aspectRatio="auto"
             />
           </div>
 

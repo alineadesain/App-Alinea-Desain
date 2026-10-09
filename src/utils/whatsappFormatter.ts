@@ -118,9 +118,12 @@ export function getOrderDisplayItems(order: Order, allOrderItems?: any[]): Order
           withDesain: !!(it.withDesain || it.jasaDesain || it.Desain),
           withCutting: !!(it.withCutting || it.jasaCutting || it.Cutting),
           withLaminating: !!(it.withLaminating || it.jasaLaminating || it.Laminating),
+          withJasaLain: !!(it.withJasaLain || it.jasaLain || it.JasaLain),
+          namaJasaLain: String(it.namaJasaLain || it.NamaJasaLain || 'Jasa Lain'),
           jasaDesain: Number(it.jasaDesain || it.Desain || 0),
           jasaCutting: Number(it.jasaCutting || it.Cutting || 0),
           jasaLaminating: Number(it.jasaLaminating || it.Laminating || 0),
+          jasaLain: Number(it.jasaLain || it.JasaLain || 0),
           subtotal: subtotal || (harga * qty)
         };
       });
@@ -157,9 +160,12 @@ export function getOrderDisplayItems(order: Order, allOrderItems?: any[]): Order
           withDesain: !!(it.withDesain || it.jasaDesain || it.Desain),
           withCutting: !!(it.withCutting || it.jasaCutting || it.Cutting),
           withLaminating: !!(it.withLaminating || it.jasaLaminating || it.Laminating),
+          withJasaLain: !!(it.withJasaLain || it.jasaLain || it.JasaLain),
+          namaJasaLain: String(it.namaJasaLain || it.NamaJasaLain || 'Jasa Lain'),
           jasaDesain: Number(it.jasaDesain || it.Desain || 0),
           jasaCutting: Number(it.jasaCutting || it.Cutting || 0),
           jasaLaminating: Number(it.jasaLaminating || it.Laminating || 0),
+          jasaLain: Number(it.jasaLain || it.JasaLain || 0),
           subtotal: subtotal || (harga * qty)
         };
       });
@@ -242,7 +248,7 @@ export function getOrderDisplayItems(order: Order, allOrderItems?: any[]): Order
   // 3. Fallback: Bentuk 1 OrderItem resmi dari data kolom sheet Orders
   const singleQty = Math.max(1, Number(order.Qty || 1));
   const total = Number(order.TotalHarga || 0);
-  const jasaTotal = Number(order.JasaDesain || 0) + Number(order.JasaCutting || 0) + Number(order.JasaLaminating || 0);
+  const jasaTotal = Number(order.JasaDesain || 0) + Number(order.JasaCutting || 0) + Number(order.JasaLaminating || 0) + Number(order.JasaLain || 0);
   const basePrice = singleQty > 0 ? Math.max(0, Math.round((total - jasaTotal) / singleQty)) : total;
 
   return [
@@ -259,9 +265,12 @@ export function getOrderDisplayItems(order: Order, allOrderItems?: any[]): Order
       withDesain: Number(order.JasaDesain || 0) > 0,
       withCutting: Number(order.JasaCutting || 0) > 0,
       withLaminating: Number(order.JasaLaminating || 0) > 0,
+      withJasaLain: Number(order.JasaLain || 0) > 0,
+      namaJasaLain: String(order.NamaJasaLain || 'Jasa Lain'),
       jasaDesain: Number(order.JasaDesain || 0),
       jasaCutting: Number(order.JasaCutting || 0),
       jasaLaminating: Number(order.JasaLaminating || 0),
+      jasaLain: Number(order.JasaLain || 0),
       subtotal: total
     }
   ];
@@ -358,6 +367,9 @@ export function formatOrderWhatsAppConfirmation(
     if (item.withLaminating && (item.jasaLaminating || 0) > 0) {
       jasaArr.push(`Laminasi: +${formatRupiah(item.jasaLaminating!)}`);
     }
+    if ((item.withJasaLain || (item.jasaLain || 0) > 0)) {
+      jasaArr.push(`${item.namaJasaLain || 'Jasa Lain'}: +${formatRupiah(item.jasaLain || 0)}`);
+    }
     if (jasaArr.length > 0) {
       lines.push(`   • Layanan: ${jasaArr.join(', ')}`);
     }
@@ -434,6 +446,14 @@ export function formatCustomerToAdminWhatsAppConfirmation(
     lines.push(`${idx + 1}. *${it.namaProduk}* (${it.qty} pcs)`);
     if (it.kategori === 'meteran' && it.panjang && it.lebar) {
       lines.push(`   Ukuran: ${it.panjang}x${it.lebar} cm - Finishing: ${it.finishing || 'Simkel'}`);
+    }
+    const jasaInfo: string[] = [];
+    if (it.withDesain && (it.jasaDesain || 0) > 0) jasaInfo.push(`Desain +${formatRupiah(it.jasaDesain!)}`);
+    if (it.withCutting && (it.jasaCutting || 0) > 0) jasaInfo.push(`Cutting +${formatRupiah(it.jasaCutting!)}`);
+    if (it.withLaminating && (it.jasaLaminating || 0) > 0) jasaInfo.push(`Laminasi +${formatRupiah(it.jasaLaminating!)}`);
+    if ((it.withJasaLain || (it.jasaLain || 0) > 0)) jasaInfo.push(`${it.namaJasaLain || 'Jasa Lain'} +${formatRupiah(it.jasaLain || 0)}`);
+    if (jasaInfo.length > 0) {
+      lines.push(`   Layanan: ${jasaInfo.join(', ')}`);
     }
   });
 

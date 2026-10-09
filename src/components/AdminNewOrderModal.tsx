@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { User, Product, Order, OrderItem } from '../types';
+import { ImageUploader } from './ImageUploader';
 import {
   X,
   Plus,
@@ -14,7 +15,8 @@ import {
   Calculator,
   RefreshCw,
   CreditCard,
-  DollarSign
+  DollarSign,
+  FileImage
 } from 'lucide-react';
 
 interface AdminNewOrderModalProps {
@@ -35,6 +37,10 @@ interface AdminOrderItemState {
   withDesain: boolean;
   withCutting: boolean;
   withLaminating: boolean;
+  withJasaLain: boolean;
+  namaJasaLain: string;
+  hargaJasaLain: number;
+  customHargaProduk?: number;
 }
 
 export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
@@ -73,7 +79,10 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
       finishing: 'Simkel',
       withDesain: false,
       withCutting: false,
-      withLaminating: false
+      withLaminating: false,
+      withJasaLain: false,
+      namaJasaLain: 'Jasa Pasang',
+      hargaJasaLain: 0
     }
   ]);
 
@@ -82,6 +91,7 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
   const [nominalDP, setNominalDP] = useState<number | ''>('');
   const [statusOrder, setStatusOrder] = useState<Order['StatusOrder']>('Order Masuk');
   const [catatan, setCatatan] = useState('');
+  const [fileDesain, setFileDesain] = useState('');
 
   // Filtered customer list
   const filteredCustomers = useMemo(() => {
@@ -104,6 +114,10 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
     const prod = products.find((p) => p.ID === item.productId);
     if (!prod) return 0;
 
+    const unitPrice = item.customHargaProduk !== undefined && item.customHargaProduk > 0
+      ? item.customHargaProduk
+      : prod.Harga;
+
     let base = 0;
     if (prod.Kategori === 'meteran') {
       const p = item.panjang || 0;
@@ -112,17 +126,18 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
         base = 0;
       } else {
         const luasM2 = Math.max(1, (p / 100) * (l / 100));
-        base = prod.Harga * luasM2 * (item.qty || 1);
+        base = unitPrice * luasM2 * (item.qty || 1);
       }
     } else {
-      base = prod.Harga * (item.qty || 1);
+      base = unitPrice * (item.qty || 1);
     }
 
     const dsn = item.withDesain ? (prod.HargaDesain !== undefined ? Number(prod.HargaDesain) : 15000) : 0;
     const cut = item.withCutting ? (prod.HargaCutting !== undefined ? Number(prod.HargaCutting) : 0) * (item.qty || 1) : 0;
     const lam = item.withLaminating ? (prod.HargaLaminating !== undefined ? Number(prod.HargaLaminating) : 0) * (item.qty || 1) : 0;
+    const jLain = item.withJasaLain ? Number(item.hargaJasaLain || 0) : 0;
 
-    return Math.round(base + dsn + cut + lam);
+    return Math.round(base + dsn + cut + lam + jLain);
   };
 
   const grandTotal = items.reduce((sum, item) => sum + calculateItemSubtotal(item), 0);
@@ -141,7 +156,10 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
         finishing: 'Simkel',
         withDesain: false,
         withCutting: false,
-        withLaminating: false
+        withLaminating: false,
+        withJasaLain: false,
+        namaJasaLain: 'Jasa Pasang',
+        hargaJasaLain: 0
       }
     ]);
   };
@@ -213,12 +231,16 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
     const orderItemsBuilt: OrderItem[] = items.map((it) => {
       const prod = products.find((p) => p.ID === it.productId) || products[0];
       const isMet = prod.Kategori === 'meteran';
+      const unitPrice = it.customHargaProduk !== undefined && it.customHargaProduk > 0
+        ? it.customHargaProduk
+        : prod.Harga;
+
       return {
         id: it.id,
         productId: prod.ID,
         namaProduk: prod.Nama,
         kategori: prod.Kategori,
-        harga: prod.Harga,
+        harga: unitPrice,
         qty: it.qty,
         panjang: isMet ? it.panjang : 0,
         lebar: isMet ? it.lebar : 0,
@@ -226,9 +248,12 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
         withDesain: it.withDesain,
         withCutting: it.withCutting,
         withLaminating: it.withLaminating,
+        withJasaLain: it.withJasaLain,
+        namaJasaLain: it.withJasaLain ? (it.namaJasaLain || 'Jasa Lain') : undefined,
         jasaDesain: it.withDesain ? (prod.HargaDesain !== undefined ? Number(prod.HargaDesain) : 15000) : 0,
         jasaCutting: it.withCutting ? (prod.HargaCutting !== undefined ? Number(prod.HargaCutting) : 0) * it.qty : 0,
         jasaLaminating: it.withLaminating ? (prod.HargaLaminating !== undefined ? Number(prod.HargaLaminating) : 0) * it.qty : 0,
+        jasaLain: it.withJasaLain ? Number(it.hargaJasaLain || 0) : 0,
         subtotal: calculateItemSubtotal(it)
       };
     });
@@ -268,6 +293,8 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
       JasaCutting: orderItemsBuilt.reduce((s, it) => s + (it.jasaCutting || 0), 0),
       JasaLaminating: orderItemsBuilt.reduce((s, it) => s + (it.jasaLaminating || 0), 0),
       JasaDesain: orderItemsBuilt.reduce((s, it) => s + (it.jasaDesain || 0), 0),
+      JasaLain: orderItemsBuilt.reduce((s, it) => s + (it.jasaLain || 0), 0),
+      NamaJasaLain: orderItemsBuilt.find((it) => it.withJasaLain)?.namaJasaLain || 'Jasa Lain',
       TotalHarga: grandTotal,
       NominalDP: dpAmount > 0 ? dpAmount : undefined,
       DP: dpAmount,
@@ -275,6 +302,7 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
       StatusBayar: finalStatusBayar,
       StatusOrder: statusOrder,
       Catatan: catatan.trim() || undefined,
+      FileDesain: fileDesain.trim() || undefined,
       Items: orderItemsBuilt
     };
 
@@ -520,7 +548,7 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                         const newProdId = e.target.value;
                         setItems(
                           items.map((it) =>
-                            it.id === item.id ? { ...it, productId: newProdId } : it
+                            it.id === item.id ? { ...it, productId: newProdId, customHargaProduk: undefined } : it
                           )
                         );
                       }}
@@ -532,6 +560,35 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  {/* Penentuan Harga Dasar Produk (Bisa diketik sampai angka terkecil 1 Rupiah) */}
+                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-700 block">
+                        Harga Dasar {currentProd?.Kategori === 'meteran' ? 'per m²' : 'Satuan'}:
+                      </span>
+                      <span className="text-[9px] text-slate-400">Bisa diubah bebas (s/d 1 rupiah)</span>
+                    </div>
+                    <div className="relative w-36">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">Rp</span>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={item.customHargaProduk !== undefined ? item.customHargaProduk : (currentProd?.Harga || '')}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? undefined : Number(e.target.value);
+                          setItems(
+                            items.map((it) =>
+                              it.id === item.id ? { ...it, customHargaProduk: val } : it
+                            )
+                          );
+                        }}
+                        placeholder="1"
+                        className="w-full pl-7 pr-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-teal-800 text-right"
+                      />
+                    </div>
                   </div>
 
                   {/* Meteran Dimensions (Panjang & Lebar) */}
@@ -642,6 +699,11 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
 
                     {/* Services toggles */}
                     <div className="bg-white p-2 rounded-xl border border-slate-200/70 space-y-1.5">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between border-b border-slate-100 pb-1">
+                        <span>Daftar Jasa</span>
+                        <span className="text-[9px] text-teal-600 font-normal">Mulai Rp 1</span>
+                      </div>
+
                       <label className="flex items-center justify-between text-[11px] cursor-pointer">
                         <div>
                           <span className="text-slate-700 font-medium block">Desain Setting</span>
@@ -701,6 +763,77 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                           className="rounded text-teal-600"
                         />
                       </label>
+
+                      {/* Jasa Lain: bisa diketikkan sendiri tarifnya, bukan harga paten */}
+                      <div className="pt-1.5 border-t border-slate-100">
+                        <label className="flex items-center justify-between text-[11px] cursor-pointer">
+                          <div>
+                            <span className="text-teal-800 font-bold block">+ Jasa Lain</span>
+                            <span className="text-[9px] text-slate-400">Tarif bebas / bukan harga paten</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={item.withJasaLain}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setItems(
+                                items.map((it) =>
+                                  it.id === item.id ? { ...it, withJasaLain: checked } : it
+                                )
+                              );
+                            }}
+                            className="rounded text-teal-600"
+                          />
+                        </label>
+
+                        {item.withJasaLain && (
+                          <div className="mt-1.5 p-2 bg-teal-50/80 border border-teal-200 rounded-lg space-y-1.5">
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-600 block">
+                                Nama Jasa:
+                              </label>
+                              <input
+                                type="text"
+                                value={item.namaJasaLain || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setItems(
+                                    items.map((it) =>
+                                      it.id === item.id ? { ...it, namaJasaLain: val } : it
+                                    )
+                                  );
+                                }}
+                                placeholder="Contoh: Jasa Pasang / Jahit / Kirim"
+                                className="w-full p-1 bg-white border border-teal-200 rounded text-[11px] font-medium"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-600 block">
+                                Tarif Jasa (Rp) - Mulai Rp 1:
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">Rp</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={item.hargaJasaLain || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 0 : Number(e.target.value);
+                                    setItems(
+                                      items.map((it) =>
+                                        it.id === item.id ? { ...it, hargaJasaLain: val } : it
+                                      )
+                                    );
+                                  }}
+                                  placeholder="0"
+                                  className="w-full pl-6 pr-1.5 py-1 bg-white border border-teal-200 rounded text-[11px] font-bold text-teal-800"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -788,7 +921,7 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
               <input
                 type="number"
                 min="0"
-                step="1000"
+                step="1"
                 value={nominalDP}
                 onChange={(e) => {
                   const val = e.target.value === '' ? '' : Number(e.target.value);
@@ -815,6 +948,18 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                 onChange={(e) => setCatatan(e.target.value)}
                 placeholder="Contoh: Desain dari customer via WA, font warna kuning..."
                 className="w-full p-2 bg-white border border-slate-200 rounded-lg text-xs"
+              />
+            </div>
+
+            {/* Upload File Desain / Foto Referensi (PNG, JPG, WEBP) */}
+            <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+              <ImageUploader
+                value={fileDesain}
+                onChange={setFileDesain}
+                label="File Desain / Lampiran Gambar (Opsional)"
+                description="Upload file gambar referensi format PNG, JPG, atau WEBP"
+                placeholderText="Upload file gambar desain (PNG, JPG, WEBP)"
+                aspectRatio="video"
               />
             </div>
           </div>

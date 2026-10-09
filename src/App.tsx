@@ -18,6 +18,7 @@ import { AdminTokoSliderManager } from './components/AdminTokoSliderManager';
 import { AdminBannerManager } from './components/AdminBannerManager';
 import { AdminExpenseModal } from './components/AdminExpenseModal';
 import { GasCodeModal } from './components/GasCodeModal';
+import { ImageUploader } from './components/ImageUploader';
 import { AdminAddProductModal } from './components/AdminAddProductModal';
 import { AdminAddCustomerModal } from './components/AdminAddCustomerModal';
 import { AdminNewOrderModal } from './components/AdminNewOrderModal';
@@ -194,6 +195,10 @@ export default function App() {
     withDesain: boolean;
     withCutting: boolean;
     withLaminating: boolean;
+    withJasaLain?: boolean;
+    namaJasaLain?: string;
+    hargaJasaLain?: number;
+    customHargaProduk?: number;
   }
 
   const [orderItems, setOrderItems] = useState<OrderFormItem[]>([
@@ -206,10 +211,14 @@ export default function App() {
       finishing: 'Simkel',
       withDesain: false,
       withCutting: false,
-      withLaminating: false
+      withLaminating: false,
+      withJasaLain: false,
+      namaJasaLain: 'Jasa Pasang',
+      hargaJasaLain: 0
     }
   ]);
   const [orderCatatan, setOrderCatatan] = useState('');
+  const [orderFileDesain, setOrderFileDesain] = useState('');
 
   // Load initial data from server on startup (agar perangkat baru langsung memiliki data & url terbaru)
   useEffect(() => {
@@ -293,6 +302,10 @@ export default function App() {
     const prod = appData.products.find((p) => p.ID === item.productId);
     if (!prod) return 0;
 
+    const unitPrice = item.customHargaProduk !== undefined && item.customHargaProduk > 0
+      ? item.customHargaProduk
+      : prod.Harga;
+
     let basePrice = 0;
     if (prod.Kategori === 'meteran') {
       const p = item.panjang || 0;
@@ -301,10 +314,10 @@ export default function App() {
         basePrice = 0;
       } else {
         const luasM2 = Math.max(1, (p / 100) * (l / 100));
-        basePrice = prod.Harga * luasM2 * item.qty;
+        basePrice = unitPrice * luasM2 * item.qty;
       }
     } else {
-      basePrice = prod.Harga * item.qty;
+      basePrice = unitPrice * item.qty;
     }
 
     const dsn = item.withDesain
@@ -316,8 +329,9 @@ export default function App() {
     const lam = item.withLaminating
       ? ((prod.HargaLaminating !== undefined && prod.HargaLaminating !== null ? Number(prod.HargaLaminating) : 0) * item.qty)
       : 0;
+    const jLain = item.withJasaLain ? Number(item.hargaJasaLain || 0) : 0;
 
-    return Math.round(basePrice + dsn + cut + lam);
+    return Math.round(basePrice + dsn + cut + lam + jLain);
   };
 
   // Grand total of active customer order form
@@ -338,12 +352,16 @@ export default function App() {
     const builtItems: OrderItem[] = orderItems.map((item) => {
       const prod = appData.products.find((p) => p.ID === item.productId)!;
       const isMet = prod.Kategori === 'meteran';
+      const unitPrice = item.customHargaProduk !== undefined && item.customHargaProduk > 0
+        ? item.customHargaProduk
+        : prod.Harga;
+
       return {
         id: item.id,
         productId: prod.ID,
         namaProduk: prod.Nama,
         kategori: prod.Kategori,
-        harga: prod.Harga,
+        harga: unitPrice,
         qty: item.qty,
         panjang: isMet ? item.panjang : 0,
         lebar: isMet ? item.lebar : 0,
@@ -351,9 +369,12 @@ export default function App() {
         withDesain: item.withDesain,
         withCutting: item.withCutting,
         withLaminating: item.withLaminating,
+        withJasaLain: item.withJasaLain,
+        namaJasaLain: item.withJasaLain ? (item.namaJasaLain || 'Jasa Lain') : undefined,
         jasaDesain: item.withDesain ? (prod.HargaDesain !== undefined && prod.HargaDesain !== null ? Number(prod.HargaDesain) : 15000) : 0,
         jasaCutting: item.withCutting ? ((prod.HargaCutting !== undefined && prod.HargaCutting !== null ? Number(prod.HargaCutting) : 0) * item.qty) : 0,
         jasaLaminating: item.withLaminating ? ((prod.HargaLaminating !== undefined && prod.HargaLaminating !== null ? Number(prod.HargaLaminating) : 0) * item.qty) : 0,
+        jasaLain: item.withJasaLain ? Number(item.hargaJasaLain || 0) : 0,
         subtotal: calculateItemTotal(item)
       };
     });
@@ -401,6 +422,8 @@ export default function App() {
       JasaCutting: builtItems.reduce((s, it) => s + (it.jasaCutting || 0), 0),
       JasaLaminating: builtItems.reduce((s, it) => s + (it.jasaLaminating || 0), 0),
       JasaDesain: builtItems.reduce((s, it) => s + (it.jasaDesain || 0), 0),
+      JasaLain: builtItems.reduce((s, it) => s + (it.jasaLain || 0), 0),
+      NamaJasaLain: builtItems.find((it) => it.withJasaLain)?.namaJasaLain || 'Jasa Lain',
       TotalHarga: orderGrandTotal,
       NominalDP: dpAmount > 0 ? dpAmount : undefined,
       DP: dpAmount,
@@ -408,6 +431,7 @@ export default function App() {
       StatusBayar: finalBayar,
       StatusOrder: 'Order Masuk',
       Catatan: orderCatatan.trim() || undefined,
+      FileDesain: orderFileDesain.trim() || undefined,
       Items: builtItems
     };
 
@@ -964,6 +988,9 @@ export default function App() {
                 JasaCutting: Number(o.JasaCutting || 0),
                 JasaLaminating: Number(o.JasaLaminating || 0),
                 JasaDesain: Number(o.JasaDesain || 0),
+                JasaLain: Number(o.JasaLain || 0),
+                NamaJasaLain: o.NamaJasaLain ? String(o.NamaJasaLain) : undefined,
+                FileDesain: o.FileDesain ? String(o.FileDesain) : undefined,
                 TotalHarga: total,
                 DP: dp,
                 NominalDP: dp,
@@ -1513,7 +1540,7 @@ export default function App() {
                                   const newProdId = e.target.value;
                                   setOrderItems(
                                     orderItems.map((it) =>
-                                      it.id === item.id ? { ...it, productId: newProdId } : it
+                                      it.id === item.id ? { ...it, productId: newProdId, customHargaProduk: undefined } : it
                                     )
                                   );
                                 }}
@@ -1525,6 +1552,35 @@ export default function App() {
                                   </option>
                                 ))}
                               </select>
+                            </div>
+
+                            {/* Penentuan Harga Dasar Produk (Bisa diketik sampai angka terkecil 1 Rupiah) */}
+                            <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-200/80 text-xs">
+                              <div>
+                                <span className="text-[10px] font-bold text-slate-700 block">
+                                  Harga Dasar {selectedProd?.Kategori === 'meteran' ? 'per m²' : 'Satuan'}:
+                                </span>
+                                <span className="text-[9px] text-slate-400">Dapat ditentukan bebas s/d 1 rupiah</span>
+                              </div>
+                              <div className="relative w-32">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">Rp</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={item.customHargaProduk !== undefined ? item.customHargaProduk : (selectedProd?.Harga || '')}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? undefined : Number(e.target.value);
+                                    setOrderItems(
+                                      orderItems.map((it) =>
+                                        it.id === item.id ? { ...it, customHargaProduk: val } : it
+                                      )
+                                    );
+                                  }}
+                                  placeholder="1"
+                                  className="w-full pl-7 pr-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-teal-800 text-right"
+                                />
+                              </div>
                             </div>
 
                             {/* Meteran inputs if meteran */}
@@ -1720,6 +1776,81 @@ export default function App() {
                                   className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
                                 />
                               </label>
+
+                              {/* Jasa Lain: Tarif bisa diketik sendiri, bukan harga paten */}
+                              <div className="pt-1.5 border-t border-slate-100">
+                                <label className="flex items-center justify-between cursor-pointer">
+                                  <div>
+                                    <span className="font-semibold text-teal-800 block">
+                                      + Jasa Lain
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">
+                                      Tarif diketik sendiri (bukan harga paten, mulai Rp 1)
+                                    </span>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={item.withJasaLain}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setOrderItems(
+                                        orderItems.map((it) =>
+                                          it.id === item.id ? { ...it, withJasaLain: checked } : it
+                                        )
+                                      );
+                                    }}
+                                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
+                                  />
+                                </label>
+
+                                {item.withJasaLain && (
+                                  <div className="mt-2 p-2 bg-teal-50/80 border border-teal-200 rounded-lg space-y-1.5 animate-in fade-in">
+                                    <div>
+                                      <label className="text-[10px] font-bold text-slate-600 block mb-0.5">
+                                        Nama Jasa Tambahan:
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={item.namaJasaLain || ''}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setOrderItems(
+                                            orderItems.map((it) =>
+                                              it.id === item.id ? { ...it, namaJasaLain: val } : it
+                                            )
+                                          );
+                                        }}
+                                        placeholder="Contoh: Jasa Pasang, Jasa Jahit, Jasa Kirim..."
+                                        className="w-full p-1.5 bg-white border border-teal-200 rounded text-xs font-medium"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="text-[10px] font-bold text-slate-600 block mb-0.5">
+                                        Tarif Jasa (Rp) - Mulai Rp 1:
+                                      </label>
+                                      <div className="relative">
+                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">Rp</span>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          step="1"
+                                          value={item.hargaJasaLain || ''}
+                                          onChange={(e) => {
+                                            const val = e.target.value === '' ? 0 : Number(e.target.value);
+                                            setOrderItems(
+                                              orderItems.map((it) =>
+                                                it.id === item.id ? { ...it, hargaJasaLain: val } : it
+                                              )
+                                            );
+                                          }}
+                                          placeholder="0"
+                                          className="w-full pl-7 pr-2 py-1.5 bg-white border border-teal-200 rounded text-xs font-bold text-teal-800"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* Subtotal of this card */}
@@ -1751,7 +1882,10 @@ export default function App() {
                             finishing: 'Simkel',
                             withDesain: false,
                             withCutting: false,
-                            withLaminating: false
+                            withLaminating: false,
+                            withJasaLain: false,
+                            namaJasaLain: 'Jasa Pasang',
+                            hargaJasaLain: 0
                           }
                         ])
                       }
@@ -1771,6 +1905,18 @@ export default function App() {
                         onChange={(e) => setOrderCatatan(e.target.value)}
                         placeholder="Contoh: Tulisan di spanduk 'Warung Berkah', background warna biru muda..."
                         className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl h-18 focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Upload File Desain / Foto Referensi (PNG, JPG, WEBP) */}
+                    <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                      <ImageUploader
+                        value={orderFileDesain}
+                        onChange={setOrderFileDesain}
+                        label="Upload File Desain / Foto Referensi (PNG, JPG, WEBP)"
+                        description="Pilih foto/desain dari galeri atau komputer Anda"
+                        placeholderText="Upload file gambar desain (PNG, JPG, WEBP)"
+                        aspectRatio="video"
                       />
                     </div>
 
@@ -1801,7 +1947,7 @@ export default function App() {
                       <input
                         type="number"
                         min="0"
-                        step="1000"
+                        step="1"
                         value={orderNominalDP}
                         onChange={(e) =>
                           setOrderNominalDP(e.target.value === '' ? '' : Number(e.target.value))
