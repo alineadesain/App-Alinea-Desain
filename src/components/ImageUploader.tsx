@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Image as ImageIcon, X, Link, Check, RefreshCw, AlertCircle } from 'lucide-react';
+import { Upload, Image as ImageIcon, X, Link, Check, RefreshCw, AlertCircle, Cloud, FolderCheck } from 'lucide-react';
 import { compressAndConvertImageFile, isValidImageFile } from '../utils/imageUploadHelper';
+import { uploadImageToGoogleDrive, DriveCategory } from '../services/driveSyncService';
 
 interface ImageUploaderProps {
   value: string;
@@ -12,6 +13,9 @@ interface ImageUploaderProps {
   maxHeight?: number;
   presets?: { label: string; url: string }[];
   placeholderText?: string;
+  category?: DriveCategory;
+  subfolder?: string;
+  storeName?: string;
 }
 
 export const ImageUploader: React.FC<ImageUploaderProps> = ({
@@ -23,12 +27,16 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   maxWidth = 1000,
   maxHeight = 1000,
   presets = [],
-  placeholderText = 'Pilih file PNG, JPG, atau WEBP'
+  placeholderText = 'Pilih file PNG, JPG, atau WEBP',
+  category = 'umum',
+  subfolder,
+  storeName
 }) => {
   const [isUrlMode, setIsUrlMode] = useState(false);
   const [urlInput, setUrlInput] = useState(value || '');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [driveFolderSaved, setDriveFolderSaved] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,9 +52,24 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     setIsProcessing(true);
 
     try {
+      // 1. Kompresi gambar terlebih dahulu
       const compressedDataUrl = await compressAndConvertImageFile(file, maxWidth, maxHeight);
-      onChange(compressedDataUrl);
-      setUrlInput(compressedDataUrl);
+      
+      // 2. Simpan otomatis ke Google Drive dengan penataan folder yang tersinkron
+      const driveResult = await uploadImageToGoogleDrive({
+        base64: compressedDataUrl,
+        fileName: file.name,
+        category,
+        subfolder,
+        storeName
+      });
+
+      const finalUrl = driveResult.url || compressedDataUrl;
+      onChange(finalUrl);
+      setUrlInput(finalUrl);
+      if (driveResult.folderName) {
+        setDriveFolderSaved(driveResult.folderName);
+      }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Gagal memproses file gambar.');
     } finally {
@@ -149,9 +172,16 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                   <Check className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Gambar Siap Digunakan</span>
                 </div>
-                <p className="text-[10px] text-slate-400 truncate mt-0.5">
-                  Format didukung: PNG, JPG, WEBP
-                </p>
+                {driveFolderSaved ? (
+                  <p className="text-[10px] text-teal-700 font-semibold flex items-center gap-1 mt-0.5">
+                    <Cloud className="w-3 h-3 text-teal-600" />
+                    <span>Tersimpan di Google Drive: {driveFolderSaved}</span>
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                    Format didukung: PNG, JPG, WEBP • Tersinkron Google Drive
+                  </p>
+                )}
                 <div className="flex items-center gap-2 mt-1.5">
                   <button
                     type="button"

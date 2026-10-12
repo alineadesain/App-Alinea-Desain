@@ -169,9 +169,10 @@ export const AdminAddProductModal: React.FC<AdminAddProductModalProps> = ({
               value={thumbnail}
               onChange={setThumbnail}
               label="Foto / Thumbnail Produk"
-              description="Pilih file gambar dari galeri/komputer atau pilih preset"
+              description="Pilih file gambar dari galeri/komputer (Tersimpan otomatis ke Google Drive 📁 Produk)"
               placeholderText="Upload file foto produk (PNG, JPG, WEBP)"
               aspectRatio="video"
+              category="produk"
               presets={PRESET_IMAGES}
             />
           </div>

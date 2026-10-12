@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import html2canvas from 'html2canvas';
 import {
   X,
   Printer,
@@ -9,7 +10,14 @@ import {
   CreditCard,
   Copy,
   Check,
-  ChevronRight
+  ChevronRight,
+  Download,
+  Share2,
+  Image as ImageIcon,
+  Cloud,
+  Loader2,
+  FileText,
+  Receipt
 } from 'lucide-react';
 import { Order, StoreData, User, BankAccount, OrderItem } from '../types';
 import {
@@ -20,6 +28,7 @@ import {
   createWhatsAppUrl,
   getOrderDisplayItems
 } from '../utils/whatsappFormatter';
+import { uploadNotaImageToDrive } from '../services/driveSyncService';
 
 interface OrderDetailModalProps {
   order: Order | null;
@@ -40,6 +49,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 }) => {
   const [copiedRekening, setCopiedRekening] = useState(false);
   const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
+  const [printMedia, setPrintMedia] = useState<'a4' | 'thermal' | 'a5'>('a4');
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+    driveUrl?: string;
+  } | null>(null);
+  const [copiedImage, setCopiedImage] = useState(false);
+
+  const captureNotaRef = useRef<HTMLDivElement>(null);
 
   // Normalisasi bank accounts toko agar selalu array aman
   const normalizedBankAccounts: BankAccount[] = useMemo(() => {
@@ -157,6 +176,175 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     order.SisaTagihan !== undefined
       ? Number(order.SisaTagihan)
       : Math.max(0, totalAmount - dpAmount);
+
+  // Helper membuat render snapshot gambar nota menggunakan html2canvas
+  const generateNotaCanvas = async (): Promise<{ dataUrl: string; blob: Blob } | null> => {
+    if (!captureNotaRef.current) return null;
+    try {
+      const canvas = await html2canvas(captureNotaRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+      if (!blob) return null;
+      return { dataUrl, blob };
+    } catch (err) {
+      console.error('Error html2canvas:', err);
+      return null;
+    }
+  };
+
+  // Simpan / Download gambar nota ke perangkat dan otomatis cadangkan ke Google Drive
+  const handleDownloadNotaImage = async () => {
+    if (!order) return;
+    setIsProcessingImage(true);
+    setFeedbackMessage(null);
+
+    try {
+      const result = await generateNotaCanvas();
+      if (!result) {
+        setFeedbackMessage({ type: 'error', text: 'Gagal membuat gambar nota. Silakan coba lagi.' });
+        return;
+      }
+
+      const { dataUrl } = result;
+      const cleanCustomer = order.NamaCustomer ? order.NamaCustomer.replace(/[^a-zA-Z0-9]/g, '_') : 'Customer';
+      const fileName = `Nota_${order.ID}_${cleanCustomer}.png`;
+
+      // 1. Download file gambar PNG ke browser perangkat
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // 2. Simpan otomatis ke Google Drive (📁 Nota Transaksi)
+      const driveRes = await uploadNotaImageToDrive(
+        order.ID,
+        order.NamaCustomer,
+        dataUrl,
+        storeData.nama_toko,
+        storeData.gas_web_app_url
+      );
+
+      setFeedbackMessage({
+        type: 'success',
+        text: driveRes.url
+          ? 'Gambar nota berhasil diunduh & tersimpan di Google Drive (📁 Nota Transaksi)!'
+          : 'Gambar nota berhasil diunduh ke perangkat Anda!',
+        driveUrl: driveRes.driveUrl || driveRes.url
+      });
+    } catch (err: any) {
+      setFeedbackMessage({
+        type: 'error',
+        text: `Gagal menyimpan gambar: ${err?.message || 'Error'}`
+      });
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
+
+  // Share gambar nota ke customer (Web Share API atau WhatsApp dengan tautan Google Drive)
+  const handleShareNotaImage = async () => {
+    if (!order) return;
+    setIsProcessingImage(true);
+    setFeedbackMessage(null);
+
+    try {
+      const result = await generateNotaCanvas();
+      if (!result) {
+        setFeedbackMessage({ type: 'error', text: 'Gagal merender gambar nota.' });
+        return;
+      }
+
+      const { dataUrl, blob } = result;
+      const cleanCustomer = order.NamaCustomer ? order.NamaCustomer.replace(/[^a-zA-Z0-9]/g, '_') : 'Customer';
+      const fileName = `Nota_${order.ID}_${cleanCustomer}.png`;
+
+      // Simpan ke Google Drive untuk tautan arsip cloud
+      const driveRes = await uploadNotaImageToDrive(
+        order.ID,
+        order.NamaCustomer,
+        dataUrl,
+        storeData.nama_toko,
+        storeData.gas_web_app_url
+      );
+
+      const customerRawPhone = findCustomerPhone(order, users);
+      const destPhone = cleanWhatsAppPhone(customerRawPhone);
+
+      // 1. Coba Share via Web Share API jika browser mendukung file sharing
+      let sharedViaNavigator = false;
+      if (typeof navigator !== 'undefined' && (navigator as any).canShare) {
+        try {
+          const fileToShare = new File([blob], fileName, { type: 'image/png' });
+          if ((navigator as any).canShare({ files: [fileToShare] })) {
+            await navigator.share({
+              title: `Nota Pesanan #${order.ID}`,
+              text: `Halo ${order.NamaCustomer}, berikut adalah nota resmi pesanan #${order.ID} dari ${storeData.nama_toko || 'Alinea Desain'}.`,
+              files: [fileToShare]
+            });
+            sharedViaNavigator = true;
+          }
+        } catch (shareErr) {
+          console.log('Web share ditutup atau dibatalkan:', shareErr);
+        }
+      }
+
+      // 2. Jika tidak melalui Web Share API, kirim via WhatsApp dengan URL Drive
+      if (!sharedViaNavigator) {
+        let baseMsg = formatOrderWhatsAppConfirmation(order, storeData, orderItems);
+        if (driveRes.driveUrl || driveRes.url) {
+          baseMsg += `\n\n🖼️ *Link Gambar Nota (Google Drive):*\n${driveRes.driveUrl || driveRes.url}`;
+        }
+        if (destPhone) {
+          const waUrl = createWhatsAppUrl(destPhone, baseMsg);
+          window.open(waUrl, '_blank');
+        } else {
+          const csPhone = cleanWhatsAppPhone(storeData.kontak || '085815950700');
+          const waUrl = createWhatsAppUrl(csPhone, baseMsg);
+          window.open(waUrl, '_blank');
+        }
+      }
+
+      setFeedbackMessage({
+        type: 'success',
+        text: 'Nota siap dibagikan! Tautan Google Drive telah disertakan ke pesan WhatsApp.',
+        driveUrl: driveRes.driveUrl || driveRes.url
+      });
+    } catch (err: any) {
+      setFeedbackMessage({
+        type: 'error',
+        text: `Gagal membagikan gambar: ${err?.message || 'Error'}`
+      });
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
+
+  // Salin gambar nota ke clipboard (Ctrl+V di WhatsApp Web)
+  const handleCopyNotaImageToClipboard = async () => {
+    setIsProcessingImage(true);
+    try {
+      const result = await generateNotaCanvas();
+      if (!result) return;
+      if (typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': result.blob })
+        ]);
+        setCopiedImage(true);
+        setTimeout(() => setCopiedImage(false), 2500);
+      }
+    } catch (err) {
+      console.warn('Gagal salin gambar:', err);
+    } finally {
+      setIsProcessingImage(false);
+    }
+  };
 
   // Klik tombol Konfirmasi Order: langsung membuka nomor WhatsApp Customer dengan pesan rincian lengkap
   const handleConfirmOrderWhatsApp = () => {
@@ -536,101 +724,239 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </div>
           </div>
 
-          {/* Modal Footer Action Buttons */}
-          <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center gap-2.5">
-            {userRole === 'admin' ? (
-              <button
-                type="button"
-                onClick={handleConfirmOrderWhatsApp}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
-                title="Kirim pesan WhatsApp rincian nota pesanan ke customer"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>Kirim Nota ke WA Customer</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleConfirmOrderWhatsApp}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>Chat CS & Konfirmasi</span>
-              </button>
-            )}
+          {/* Feedback Banner: Sukses Simpan / Share Gambar */}
+          {feedbackMessage && (
+            <div className={`mx-4 mb-2 p-3 rounded-2xl text-xs flex items-center justify-between gap-2 animate-in fade-in ${
+              feedbackMessage.type === 'success'
+                ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                : 'bg-rose-50 border border-rose-200 text-rose-800'
+            }`}>
+              <div className="flex items-center gap-2">
+                {feedbackMessage.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{feedbackMessage.text}</span>
+              </div>
+              {feedbackMessage.driveUrl && (
+                <a
+                  href={feedbackMessage.driveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold underline text-[11px] text-teal-700 hover:text-teal-900 flex items-center gap-1 shrink-0"
+                >
+                  <Cloud className="w-3.5 h-3.5" />
+                  <span>Lihat di Drive</span>
+                </a>
+              )}
+            </div>
+          )}
 
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold py-3 px-3.5 rounded-xl text-xs flex items-center justify-center transition active:scale-95 cursor-pointer shadow-2xs"
-              title="Cetak Nota Pesanan"
-            >
-              <Printer className="w-4 h-4" />
-            </button>
+          {/* Pengaturan Media Cetak & Tombol Aksi Lengkap */}
+          <div className="p-4 bg-slate-50 border-t border-slate-100 space-y-3">
+            {/* Pilihan Media Cetak (A4 Pas 1 Halaman, Thermal Struk, A5) */}
+            <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200">
+              <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5 pl-1">
+                <Receipt className="w-3.5 h-3.5 text-teal-600" />
+                <span>Media Cetak:</span>
+              </span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPrintMedia('a4')}
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-xl transition cursor-pointer ${
+                    printMedia === 'a4'
+                      ? 'bg-teal-700 text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                  title="Ukuran A4/F4 Pas 1 Halaman"
+                >
+                  A4 Pas (1 Halaman)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintMedia('thermal')}
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-xl transition cursor-pointer ${
+                    printMedia === 'thermal'
+                      ? 'bg-teal-700 text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                  title="Ukuran Struk Kasir Gulung 58mm / 80mm"
+                >
+                  Thermal (Struk)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintMedia('a5')}
+                  className={`text-[10px] font-bold px-2.5 py-1 rounded-xl transition cursor-pointer ${
+                    printMedia === 'a5'
+                      ? 'bg-teal-700 text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                  title="Ukuran Ringkas Setengah Halaman"
+                >
+                  A5 Ringkas
+                </button>
+              </div>
+            </div>
+
+            {/* Baris Tombol Simpan & Share Gambar Nota */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadNotaImage}
+                disabled={isProcessingImage}
+                className="bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-800 border border-slate-200 hover:border-teal-300 font-bold py-2 px-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer shadow-2xs disabled:opacity-50"
+                title="Download gambar nota (PNG) dan otomatis simpan ke Google Drive"
+              >
+                {isProcessingImage ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600" />
+                ) : (
+                  <Download className="w-3.5 h-3.5 text-teal-600" />
+                )}
+                <span>Simpan Gambar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShareNotaImage}
+                disabled={isProcessingImage}
+                className="bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-800 border border-slate-200 hover:border-teal-300 font-bold py-2 px-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer shadow-2xs disabled:opacity-50"
+                title="Bagikan gambar nota via Web Share / link WhatsApp ke customer"
+              >
+                <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Share Gambar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyNotaImageToClipboard}
+                disabled={isProcessingImage}
+                className="bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-800 border border-slate-200 hover:border-teal-300 font-bold py-2 px-2.5 rounded-xl text-[11px] flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer shadow-2xs disabled:opacity-50"
+                title="Salin gambar nota ke clipboard (langsung Ctrl+V di WA Web)"
+              >
+                {copiedImage ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">Tersalin</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Salin Gambar</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Baris Tombol Utama: Kirim Pesan WA & Cetak Nota (Print) */}
+            <div className="flex items-center gap-2 pt-1">
+              {userRole === 'admin' ? (
+                <button
+                  type="button"
+                  onClick={handleConfirmOrderWhatsApp}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
+                  title="Kirim rincian nota pesanan ke WhatsApp customer"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Kirim Pesan ke WA</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleConfirmOrderWhatsApp}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition active:scale-95 cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Chat CS & Konfirmasi</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="bg-teal-800 hover:bg-teal-900 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer shadow-md shadow-teal-900/20"
+                title="Cetak Nota 1 Halaman Pas sesuai media yang dipilih"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Cetak Nota</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ======================================================== */}
       {/* 2. DOKUMEN CETAK NOTA RESMI (HANYA MUNCUL SAAT WINDOW.PRINT) */}
+      {/* Sesuai Permintaan: FIT 1 HALAMAN PAS & MENYESUAIKAN MEDIA */}
       {/* ======================================================== */}
-      <div className="hidden print:block font-sans text-black p-4 max-w-3xl mx-auto">
+      <div
+        id="printable-nota-root"
+        className={`hidden print:block font-sans text-black mx-auto print-avoid-break ${
+          printMedia === 'thermal'
+            ? 'max-w-[380px] p-2 text-[10px]'
+            : printMedia === 'a5'
+            ? 'max-w-[600px] p-3 text-[11px]'
+            : 'max-w-[760px] p-4 text-xs'
+        }`}
+      >
         {/* Header Nota */}
-        <div className="border-b-2 border-black pb-4 mb-4 flex justify-between items-start">
-          <div>
-            <h1 className="text-xl font-black uppercase tracking-wider">
+        <div className="border-b-2 border-black pb-3 mb-3 flex justify-between items-start">
+          <div className="space-y-0.5">
+            <h1 className="text-lg font-black uppercase tracking-wider leading-tight">
               {storeData.nama_toko || 'ALINEA DESAIN'}
             </h1>
-            <p className="text-xs text-gray-700">
+            <p className="text-[11px] text-gray-700">
               {storeData.tagline || 'Percetakan & Digital Printing Cepat Berkualitas'}
             </p>
-            <p className="text-[11px] text-gray-600 mt-1 max-w-md">
+            <p className="text-[10px] text-gray-600 max-w-sm">
               {storeData.alamat}
             </p>
-            <p className="text-[11px] font-bold text-gray-800">
+            <p className="text-[10px] font-bold text-gray-800">
               WhatsApp CS: {storeData.kontak}
             </p>
           </div>
-          <div className="text-right">
-            <h2 className="text-lg font-black tracking-wide border-b-2 border-black pb-0.5 inline-block">
+          <div className="text-right shrink-0">
+            <h2 className="text-base font-black tracking-wide border-b-2 border-black pb-0.5 inline-block">
               NOTA PESANAN
             </h2>
-            <div className="text-xs mt-1.5 space-y-0.5">
+            <div className="text-[11px] mt-1 space-y-0.5">
               <div>No: <strong>{order.ID}</strong></div>
               <div>Tgl: {formatDate(order.Tgl)}</div>
             </div>
           </div>
         </div>
 
-        {/* Informasi Customer */}
-        <div className="bg-gray-50 border border-gray-300 rounded p-2.5 mb-4 text-xs grid grid-cols-2 gap-2">
+        {/* Informasi Customer (Grid Ramping 4 Kolom) */}
+        <div className="bg-gray-50 border border-gray-300 rounded p-2 mb-3 text-[11px] grid grid-cols-2 sm:grid-cols-4 gap-2">
           <div>
-            <span className="text-gray-500">Nama Customer:</span>{' '}
+            <span className="text-gray-500 block text-[9px] uppercase">Nama Customer</span>
             <strong className="text-black uppercase">{order.NamaCustomer}</strong>
           </div>
           <div>
-            <span className="text-gray-500">No. WhatsApp:</span>{' '}
+            <span className="text-gray-500 block text-[9px] uppercase">No. WhatsApp</span>
             <strong className="text-black">{String(order.NoCustomer || '-')}</strong>
           </div>
           <div>
-            <span className="text-gray-500">ID Customer:</span>{' '}
+            <span className="text-gray-500 block text-[9px] uppercase">ID Customer</span>
             <strong className="text-black">{order.KodeCustomer || '-'}</strong>
           </div>
           <div>
-            <span className="text-gray-500">Status Pembayaran:</span>{' '}
-            <strong className="text-black uppercase">{order.StatusBayar}</strong>
+            <span className="text-gray-500 block text-[9px] uppercase">Status Pembayaran</span>
+            <strong className="text-black uppercase font-bold">{order.StatusBayar}</strong>
           </div>
         </div>
 
-        {/* Tabel Detail Tiap Produk (Mendukung Satuan dan Multi-Item) */}
-        <table className="w-full text-xs border-collapse border border-gray-400 mb-4">
+        {/* Tabel Detail Tiap Produk (Borders Bersih, Padding Kompak 1 Halaman) */}
+        <table className="w-full text-[11px] border-collapse border border-gray-400 mb-3">
           <thead>
             <tr className="bg-gray-100 text-gray-800">
-              <th className="border border-gray-400 p-2 text-center w-10">No</th>
-              <th className="border border-gray-400 p-2 text-left">Nama Produk & Spesifikasi</th>
-              <th className="border border-gray-400 p-2 text-center w-16">Qty</th>
-              <th className="border border-gray-400 p-2 text-right w-28">Harga Satuan</th>
-              <th className="border border-gray-400 p-2 text-right w-28">Subtotal</th>
+              <th className="border border-gray-400 py-1.5 px-2 text-center w-8">No</th>
+              <th className="border border-gray-400 py-1.5 px-2 text-left">Nama Produk & Spesifikasi</th>
+              <th className="border border-gray-400 py-1.5 px-2 text-center w-14">Qty</th>
+              <th className="border border-gray-400 py-1.5 px-2 text-right w-24">Harga Satuan</th>
+              <th className="border border-gray-400 py-1.5 px-2 text-right w-24">Subtotal</th>
             </tr>
           </thead>
           <tbody>
@@ -642,16 +968,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
               return (
                 <tr key={item.id || idx}>
-                  <td className="border border-gray-400 p-2 text-center font-bold">{idx + 1}</td>
-                  <td className="border border-gray-400 p-2">
+                  <td className="border border-gray-400 py-1.5 px-2 text-center font-bold">{idx + 1}</td>
+                  <td className="border border-gray-400 py-1.5 px-2">
                     <div className="font-bold">{item.namaProduk}</div>
                     {itemIsMeteran && item.panjang && item.lebar && (
-                      <div className="text-[10px] text-gray-600">
+                      <div className="text-[9px] text-gray-600">
                         Ukuran: {item.panjang} x {item.lebar} cm ({itemLuas.toFixed(2)} m²) • Finishing: {item.finishing || 'Simkel'}
                       </div>
                     )}
                     {(item.withDesain || item.withCutting || item.withLaminating || item.withJasaLain || (item.jasaDesain || 0) > 0 || (item.jasaCutting || 0) > 0 || (item.jasaLaminating || 0) > 0 || (item.jasaLain || 0) > 0) && (
-                      <div className="text-[10px] text-gray-600 italic">
+                      <div className="text-[9px] text-gray-600 italic">
                         Layanan: {[
                           (item.withDesain || (item.jasaDesain || 0) > 0) ? `Desain (${formatRp(item.jasaDesain || 0)})` : '',
                           (item.withCutting || (item.jasaCutting || 0) > 0) ? `Cutting (${formatRp(item.jasaCutting || 0)})` : '',
@@ -661,9 +987,9 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       </div>
                     )}
                   </td>
-                  <td className="border border-gray-400 p-2 text-center">{item.qty} pcs</td>
-                  <td className="border border-gray-400 p-2 text-right">{formatRp(item.harga)}</td>
-                  <td className="border border-gray-400 p-2 text-right font-bold">{formatRp(item.subtotal)}</td>
+                  <td className="border border-gray-400 py-1.5 px-2 text-center">{item.qty} pcs</td>
+                  <td className="border border-gray-400 py-1.5 px-2 text-right">{formatRp(item.harga)}</td>
+                  <td className="border border-gray-400 py-1.5 px-2 text-right font-bold">{formatRp(item.subtotal)}</td>
                 </tr>
               );
             })}
@@ -671,20 +997,20 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         </table>
 
         {/* Ringkasan Pembayaran & Rekening */}
-        <div className="flex justify-between items-start gap-4 mb-6">
-          <div className="w-1/2 text-xs space-y-2">
+        <div className="flex justify-between items-start gap-3 mb-4 text-[11px]">
+          <div className="w-1/2 space-y-1.5">
             {order.Catatan && (
-              <div className="border border-gray-300 p-2 rounded">
+              <div className="border border-gray-300 p-2 rounded bg-gray-50 text-[10px]">
                 <strong>Catatan:</strong> {order.Catatan}
               </div>
             )}
-            <div className="border border-gray-300 p-2 rounded bg-gray-50 text-[11px]">
+            <div className="border border-gray-300 p-2 rounded bg-gray-50 text-[10px]">
               <div><strong>Rekening Pembayaran:</strong></div>
               {normalizedBankAccounts.length > 0 ? (
-                <div className="space-y-0.5 mt-1 font-mono">
+                <div className="space-y-0.5 mt-0.5 font-mono">
                   {normalizedBankAccounts.map((b) => (
                     <div key={b.id}>
-                      • <strong>{b.bank}:</strong> {b.nomor} (a.n {b.atasNama}) {b.isPrimary ? '★' : ''}
+                      • <strong>{b.bank}:</strong> {b.nomor} (a.n {b.atasNama})
                     </div>
                   ))}
                 </div>
@@ -694,19 +1020,19 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </div>
           </div>
 
-          <div className="w-1/2 text-xs">
-            <div className="border border-gray-400 p-2.5 rounded space-y-1.5">
-              <div className="flex justify-between font-bold text-sm border-b border-gray-300 pb-1">
+          <div className="w-1/2">
+            <div className="border border-gray-400 p-2 rounded space-y-1">
+              <div className="flex justify-between font-bold text-xs border-b border-gray-300 pb-1">
                 <span>TOTAL:</span>
                 <span>{formatRp(order.TotalHarga)}</span>
               </div>
               {dpAmount > 0 && (
-                <div className="flex justify-between">
+                <div className="flex justify-between text-[11px]">
                   <span>Uang Muka (DP):</span>
                   <span>{formatRp(dpAmount)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-bold text-sm pt-1 border-t border-gray-300">
+              <div className="flex justify-between font-bold text-xs pt-1 border-t border-gray-300">
                 <span>SISA TAGIHAN:</span>
                 <span className={sisaTagihan <= 0 ? 'text-green-700' : 'text-red-700'}>
                   {sisaTagihan <= 0 ? 'LUNAS' : formatRp(sisaTagihan)}
@@ -716,15 +1042,187 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Tanda Tangan */}
-        <div className="grid grid-cols-2 text-center text-xs mt-8 pt-4">
+        {/* Tanda Tangan (Tinggi Kompak Menjaga 1 Halaman Pas) */}
+        <div className="grid grid-cols-2 text-center text-[10px] mt-4 pt-2">
           <div>
-            <p className="mb-14">Tanda Terima Customer,</p>
-            <p className="border-t border-black inline-block px-8 pt-1">({order.NamaCustomer})</p>
+            <p className="mb-8">Tanda Terima Customer,</p>
+            <p className="border-t border-black inline-block px-6 pt-1 font-bold">({order.NamaCustomer})</p>
           </div>
           <div>
-            <p className="mb-14">Kasir / Hormat Kami,</p>
-            <p className="border-t border-black inline-block px-8 pt-1">({storeData.nama_toko || 'Alinea Desain'})</p>
+            <p className="mb-8">Kasir / Hormat Kami,</p>
+            <p className="border-t border-black inline-block px-6 pt-1 font-bold">({storeData.nama_toko || 'Alinea Desain'})</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* 3. DOKUMEN OFF-SCREEN UNTUK CAPTURE GAMBAR BERESOLUSI TINGGI */}
+      {/* Digunakan khusus oleh html2canvas agar selalu pixel-perfect */}
+      {/* ======================================================== */}
+      <div
+        ref={captureNotaRef}
+        style={{
+          position: 'fixed',
+          left: '-9999px',
+          top: 0,
+          width: '760px',
+          backgroundColor: '#ffffff',
+          color: '#000000',
+          padding: '24px',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          zIndex: -100
+        }}
+      >
+        {/* Header Nota Gambar */}
+        <div style={{ borderBottom: '2px solid #000000', paddingBottom: '12px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h1 style={{ fontSize: '18px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>
+              {storeData.nama_toko || 'ALINEA DESAIN'}
+            </h1>
+            <p style={{ fontSize: '11px', color: '#4b5563', margin: '3px 0 0 0' }}>
+              {storeData.tagline || 'Percetakan & Digital Printing Cepat Berkualitas'}
+            </p>
+            <p style={{ fontSize: '10px', color: '#6b7280', margin: '3px 0 0 0', maxWidth: '380px' }}>
+              {storeData.alamat}
+            </p>
+            <p style={{ fontSize: '10px', fontWeight: 'bold', color: '#1f2937', margin: '3px 0 0 0' }}>
+              WhatsApp CS: {storeData.kontak}
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 900, letterSpacing: '0.5px', borderBottom: '2px solid #000000', paddingBottom: '2px', display: 'inline-block', margin: 0 }}>
+              NOTA PESANAN
+            </h2>
+            <div style={{ fontSize: '11px', marginTop: '6px' }}>
+              <div>No: <strong>{order.ID}</strong></div>
+              <div>Tgl: {formatDate(order.Tgl)}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Customer Bar */}
+        <div style={{ backgroundColor: '#f9fafb', border: '1px solid #d1d5db', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', fontSize: '11px' }}>
+          <div>
+            <span style={{ fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', display: 'block' }}>Nama Customer</span>
+            <strong style={{ textTransform: 'uppercase' }}>{order.NamaCustomer}</strong>
+          </div>
+          <div>
+            <span style={{ fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', display: 'block' }}>No. WhatsApp</span>
+            <strong>{String(order.NoCustomer || '-')}</strong>
+          </div>
+          <div>
+            <span style={{ fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', display: 'block' }}>ID Customer</span>
+            <strong>{order.KodeCustomer || '-'}</strong>
+          </div>
+          <div>
+            <span style={{ fontSize: '9px', color: '#6b7280', textTransform: 'uppercase', display: 'block' }}>Status Bayar</span>
+            <strong style={{ textTransform: 'uppercase' }}>{order.StatusBayar}</strong>
+          </div>
+        </div>
+
+        {/* Items Table */}
+        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', border: '1px solid #9ca3af', marginBottom: '12px' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#f3f4f6', color: '#1f2937' }}>
+              <th style={{ border: '1px solid #9ca3af', padding: '6px', textAlign: 'center', width: '30px' }}>No</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '6px', textAlign: 'left' }}>Nama Produk & Spesifikasi</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '6px', textAlign: 'center', width: '50px' }}>Qty</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '6px', textAlign: 'right', width: '100px' }}>Harga Satuan</th>
+              <th style={{ border: '1px solid #9ca3af', padding: '6px', textAlign: 'right', width: '100px' }}>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {displayItems.map((item, idx) => {
+              const itemIsMeteran = item.kategori === 'meteran' || ((item.panjang || 0) > 0 && (item.lebar || 0) > 0);
+              const itemLuas = itemIsMeteran && item.panjang && item.lebar
+                ? Math.max(1, ((item.panjang / 100) * (item.lebar / 100)))
+                : 0;
+
+              return (
+                <tr key={item.id || idx}>
+                  <td style={{ border: '1px solid #9ca3af', padding: '6px', textAlign: 'center', fontWeight: 'bold' }}>{idx + 1}</td>
+                  <td style={{ border: '1px solid #9ca3af', padding: '6px' }}>
+                    <div style={{ fontWeight: 'bold' }}>{item.namaProduk}</div>
+                    {itemIsMeteran && item.panjang && item.lebar && (
+                      <div style={{ fontSize: '9px', color: '#4b5563', marginTop: '2px' }}>
+                        Ukuran: {item.panjang} x {item.lebar} cm ({itemLuas.toFixed(2)} m²) • Finishing: {item.finishing || 'Simkel'}
+                      </div>
+                    )}
+                    {(item.withDesain || item.withCutting || item.withLaminating || item.withJasaLain || (item.jasaDesain || 0) > 0 || (item.jasaCutting || 0) > 0 || (item.jasaLaminating || 0) > 0 || (item.jasaLain || 0) > 0) && (
+                      <div style={{ fontSize: '9px', color: '#4b5563', fontStyle: 'italic', marginTop: '2px' }}>
+                        Layanan: {[
+                          (item.withDesain || (item.jasaDesain || 0) > 0) ? `Desain (${formatRp(item.jasaDesain || 0)})` : '',
+                          (item.withCutting || (item.jasaCutting || 0) > 0) ? `Cutting (${formatRp(item.jasaCutting || 0)})` : '',
+                          (item.withLaminating || (item.jasaLaminating || 0) > 0) ? `Laminasi (${formatRp(item.jasaLaminating || 0)})` : '',
+                          (item.withJasaLain || (item.jasaLain || 0) > 0) ? `${item.namaJasaLain || 'Jasa Lain'} (${formatRp(item.jasaLain || 0)})` : ''
+                        ].filter(Boolean).join(', ')}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ border: '1px solid #9ca3af', padding: '6px', textAlign: 'center' }}>{item.qty} pcs</td>
+                  <td style={{ border: '1px solid #9ca3af', padding: '6px', textAlign: 'right' }}>{formatRp(item.harga)}</td>
+                  <td style={{ border: '1px solid #9ca3af', padding: '6px', textAlign: 'right', fontWeight: 'bold' }}>{formatRp(item.subtotal)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* Summary Grid */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginBottom: '16px', fontSize: '11px' }}>
+          <div style={{ width: '50%' }}>
+            {order.Catatan && (
+              <div style={{ border: '1px solid #d1d5db', padding: '6px 8px', borderRadius: '4px', backgroundColor: '#f9fafb', marginBottom: '6px', fontSize: '10px' }}>
+                <strong>Catatan:</strong> {order.Catatan}
+              </div>
+            )}
+            <div style={{ border: '1px solid #d1d5db', padding: '6px 8px', borderRadius: '4px', backgroundColor: '#f9fafb', fontSize: '10px' }}>
+              <div><strong>Rekening Pembayaran:</strong></div>
+              {normalizedBankAccounts.length > 0 ? (
+                <div style={{ marginTop: '2px', fontFamily: 'monospace' }}>
+                  {normalizedBankAccounts.map((b) => (
+                    <div key={b.id}>
+                      • <strong>{b.bank}:</strong> {b.nomor} (a.n {b.atasNama})
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div>{storeData.rekening}</div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ width: '50%' }}>
+            <div style={{ border: '1px solid #9ca3af', padding: '8px', borderRadius: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '12px', borderBottom: '1px solid #e5e7eb', paddingBottom: '4px' }}>
+                <span>TOTAL:</span>
+                <span>{formatRp(order.TotalHarga)}</span>
+              </div>
+              {dpAmount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '11px' }}>
+                  <span>Uang Muka (DP):</span>
+                  <span>{formatRp(dpAmount)}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '12px', marginTop: '4px', borderTop: '1px solid #e5e7eb', paddingTop: '4px' }}>
+                <span>SISA TAGIHAN:</span>
+                <span style={{ color: sisaTagihan <= 0 ? '#15803d' : '#b91c1c' }}>
+                  {sisaTagihan <= 0 ? 'LUNAS' : formatRp(sisaTagihan)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tanda Tangan */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', textAlign: 'center', fontSize: '10px', marginTop: '16px', paddingTop: '8px' }}>
+          <div>
+            <p style={{ marginBottom: '36px' }}>Tanda Terima Customer,</p>
+            <p style={{ borderTop: '1px solid #000000', display: 'inline-block', padding: '2px 24px 0 24px', fontWeight: 'bold' }}>({order.NamaCustomer})</p>
+          </div>
+          <div>
+            <p style={{ marginBottom: '36px' }}>Kasir / Hormat Kami,</p>
+            <p style={{ borderTop: '1px solid #000000', display: 'inline-block', padding: '2px 24px 0 24px', fontWeight: 'bold' }}>({storeData.nama_toko || 'Alinea Desain'})</p>
           </div>
         </div>
       </div>

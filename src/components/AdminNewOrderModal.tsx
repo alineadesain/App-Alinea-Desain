@@ -666,31 +666,48 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                       <label className="text-[10px] font-bold text-slate-600 block mb-0.5">
                         Jumlah (Qty)
                       </label>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => {
                             setItems(
                               items.map((it) =>
-                                it.id === item.id ? { ...it, qty: Math.max(1, it.qty - 1) } : it
+                                it.id === item.id ? { ...it, qty: Math.max(1, (it.qty || 1) - 1) } : it
                               )
                             );
                           }}
-                          className="w-7 h-7 rounded bg-white border border-slate-200 flex items-center justify-center font-bold"
+                          className="w-7 h-7 rounded bg-white hover:bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 cursor-pointer active:scale-95"
+                          title="Kurangi 1"
                         >
                           <Minus className="w-3 h-3" />
                         </button>
-                        <span className="font-extrabold w-8 text-center">{item.qty}</span>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={item.qty === 0 ? '' : item.qty}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 1 : Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setItems(
+                              items.map((it) =>
+                                it.id === item.id ? { ...it, qty: val } : it
+                              )
+                            );
+                          }}
+                          className="w-14 h-7 text-center font-extrabold text-xs bg-white border border-slate-200 rounded focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                          title="Ketik jumlah pesanan (Qty)"
+                        />
                         <button
                           type="button"
                           onClick={() => {
                             setItems(
                               items.map((it) =>
-                                it.id === item.id ? { ...it, qty: it.qty + 1 } : it
+                                it.id === item.id ? { ...it, qty: (it.qty || 1) + 1 } : it
                               )
                             );
                           }}
-                          className="w-7 h-7 rounded bg-white border border-slate-200 flex items-center justify-center font-bold"
+                          className="w-7 h-7 rounded bg-white hover:bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 cursor-pointer active:scale-95"
+                          title="Tambah 1"
                         >
                           <Plus className="w-3 h-3" />
                         </button>
@@ -957,9 +974,11 @@ export const AdminNewOrderModal: React.FC<AdminNewOrderModalProps> = ({
                 value={fileDesain}
                 onChange={setFileDesain}
                 label="File Desain / Lampiran Gambar (Opsional)"
-                description="Upload file gambar referensi format PNG, JPG, atau WEBP"
+                description="Upload file gambar referensi format PNG, JPG, atau WEBP (Tersimpan ke Google Drive)"
                 placeholderText="Upload file gambar desain (PNG, JPG, WEBP)"
                 aspectRatio="video"
+                category="pesanan"
+                storeName="Alinea Desain"
               />
             </div>
           </div>

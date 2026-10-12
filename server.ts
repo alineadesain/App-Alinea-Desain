@@ -272,7 +272,115 @@ async function startServer() {
   });
 
   // ==========================================
-  // 5. STATIC / VITE MIDDLEWARE
+  // 5. ENDPOINT PENYIMPANAN GAMBAR GOOGLE DRIVE (PNG, JPG, WEBP) & AUTO FOLDER
+  // ==========================================
+  const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+
+  app.use('/uploads', express.static(UPLOADS_DIR));
+
+  app.post('/api/upload-drive', async (req, res) => {
+    const { url, base64, dataUrl, fileName, mimeType, category, subfolder, storeName } = req.body;
+
+    const rawData = base64 || dataUrl;
+    if (!rawData) {
+      return res.status(400).json({ success: false, message: 'Data gambar base64 tidak ditemukan' });
+    }
+
+    const targetCategory = category || 'umum';
+    const cleanFileName = (fileName || `image_${Date.now()}.jpg`).replace(/[^a-zA-Z0-9_.-]/g, '_');
+
+    // 1. Coba upload langsung ke Google Drive melalui Google Apps Script Web App jika URL tersedia
+    if (url && typeof url === 'string' && url.startsWith('http')) {
+      try {
+        const gasPayload = {
+          action: 'uploadFileToDrive',
+          base64: rawData,
+          fileName: cleanFileName,
+          mimeType: mimeType || 'image/jpeg',
+          category: targetCategory,
+          subfolder: subfolder || '',
+          storeName: storeName || 'Alinea Desain'
+        };
+
+        let response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(gasPayload),
+          redirect: 'manual'
+        });
+
+        let redirectHops = 0;
+        while ((response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) && redirectHops < 5) {
+          const redirectUrl = response.headers.get('location');
+          if (!redirectUrl) break;
+          response = await fetch(redirectUrl, { method: 'GET' });
+          redirectHops++;
+        }
+
+        const text = await response.text();
+        try {
+          const gasResult = JSON.parse(text);
+          if (gasResult && gasResult.success) {
+            return res.json({
+              ...gasResult,
+              source: 'google-drive'
+            });
+          }
+        } catch {
+          // Fallback ke penyimpanan lokal jika parsing respon GAS gagal
+        }
+      } catch (err: any) {
+        console.warn('Gagal upload ke Google Drive via GAS, menggunakan fallback server penyimpanan lokal:', err?.message);
+      }
+    }
+
+    // 2. Fallback penyimpanan lokal dengan struktur folder otomatis yang tersinkron
+    try {
+      const catFolder = path.join(UPLOADS_DIR, targetCategory);
+      if (!fs.existsSync(catFolder)) {
+        fs.mkdirSync(catFolder, { recursive: true });
+      }
+
+      // Bersihkan base64 data URL
+      let base64Pure = rawData;
+      let detectedExt = '.jpg';
+      if (rawData.includes(';base64,')) {
+        const parts = rawData.split(';base64,');
+        if (parts[0].includes('image/png')) detectedExt = '.png';
+        else if (parts[0].includes('image/webp')) detectedExt = '.webp';
+        base64Pure = parts[1];
+      }
+
+      const safeName = cleanFileName.includes('.') ? cleanFileName : `${cleanFileName}${detectedExt}`;
+      const filePath = path.join(catFolder, safeName);
+      const buffer = Buffer.from(base64Pure, 'base64');
+      fs.writeFileSync(filePath, buffer);
+
+      const localUrl = `/uploads/${targetCategory}/${safeName}`;
+      return res.json({
+        success: true,
+        message: 'Gambar berhasil disimpan (Lokal & Terorganisir)',
+        url: localUrl,
+        driveUrl: localUrl,
+        viewUrl: localUrl,
+        fileName: safeName,
+        folderName: `📁 ${targetCategory.charAt(0).toUpperCase() + targetCategory.slice(1)}`,
+        category: targetCategory,
+        source: 'server-local'
+      });
+    } catch (localErr: any) {
+      return res.status(500).json({
+        success: false,
+        message: `Gagal menyimpan gambar: ${localErr?.message}`
+      });
+    }
+  });
+
+  // ==========================================
+  // 6. STATIC / VITE MIDDLEWARE
   // ==========================================
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.resolve(__dirname, 'dist')));

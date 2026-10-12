@@ -1661,35 +1661,50 @@ export default function App() {
                               <label className="text-[11px] font-bold text-slate-600 block mb-1">
                                 Jumlah (Qty)
                               </label>
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setOrderItems(
                                       orderItems.map((it) =>
                                         it.id === item.id
-                                          ? { ...it, qty: Math.max(1, it.qty - 1) }
+                                          ? { ...it, qty: Math.max(1, (it.qty || 1) - 1) }
                                           : it
                                       )
                                     );
                                   }}
-                                  className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 hover:bg-slate-100"
+                                  className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 hover:bg-slate-100 cursor-pointer active:scale-95"
+                                  title="Kurangi 1"
                                 >
                                   <Minus className="w-3.5 h-3.5" />
                                 </button>
-                                <span className="font-extrabold text-sm w-12 text-center">
-                                  {item.qty}
-                                </span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={item.qty === 0 ? '' : item.qty}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? 1 : Math.max(1, parseInt(e.target.value, 10) || 1);
+                                    setOrderItems(
+                                      orderItems.map((it) =>
+                                        it.id === item.id ? { ...it, qty: val } : it
+                                      )
+                                    );
+                                  }}
+                                  className="w-16 h-8 text-center font-extrabold text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                                  title="Ketik jumlah pesanan (Qty)"
+                                />
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setOrderItems(
                                       orderItems.map((it) =>
-                                        it.id === item.id ? { ...it, qty: it.qty + 1 } : it
+                                        it.id === item.id ? { ...it, qty: (it.qty || 1) + 1 } : it
                                       )
                                     );
                                   }}
-                                  className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 hover:bg-slate-100"
+                                  className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700 hover:bg-slate-100 cursor-pointer active:scale-95"
+                                  title="Tambah 1"
                                 >
                                   <Plus className="w-3.5 h-3.5" />
                                 </button>
@@ -1914,9 +1929,11 @@ export default function App() {
                         value={orderFileDesain}
                         onChange={setOrderFileDesain}
                         label="Upload File Desain / Foto Referensi (PNG, JPG, WEBP)"
-                        description="Pilih foto/desain dari galeri atau komputer Anda"
+                        description="Pilih foto/desain dari galeri atau komputer Anda (Tersinkron ke Google Drive)"
                         placeholderText="Upload file gambar desain (PNG, JPG, WEBP)"
                         aspectRatio="video"
+                        category="pesanan"
+                        storeName={appData?.storeData?.nama_toko}
                       />
                     </div>
 

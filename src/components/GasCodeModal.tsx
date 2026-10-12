@@ -104,6 +104,10 @@ function doPost(e) {
       result = saveAllStoreData(data.storeData || data);
     } else if (action === 'syncFullDatabase' || action === 'pushAllDatabase') {
       result = syncFullDatabase(data.database || data.fullData || data);
+    } else if (action === 'uploadFileToDrive' || action === 'uploadImage') {
+      result = uploadFileToDrive(data);
+    } else if (action === 'getDriveFolders') {
+      result = getDriveFoldersList(data.storeName);
     }
 
     return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
@@ -728,6 +732,117 @@ function syncFullDatabase(data) {
     return { success: true };
   } catch (err) {
     return { success: false, message: err.toString() };
+  }
+}
+
+// Helper untuk mencari atau membuat folder di Google Drive
+function getOrCreateDriveFolder(folderName, parentFolder) {
+  var parent = parentFolder || DriveApp.getRootFolder();
+  var folders = parent.getFoldersByName(folderName);
+  if (folders.hasNext()) return folders.next();
+  return parent.createFolder(folderName);
+}
+
+// Mendapatkan folder utama aplikasi di Google Drive
+function getAppRootDriveFolder(storeName) {
+  var rootName = (storeName && String(storeName).trim()) ? String(storeName).trim() + " - File & Media" : "Alinea Desain - File & Media";
+  return getOrCreateDriveFolder(rootName);
+}
+
+// Mendapatkan folder kategori tersinkronisasi (Produk, Pesanan, Nota, Pengeluaran, Branding)
+function getDriveFolderForCategory(category, storeName, subContext) {
+  var rootFolder = getAppRootDriveFolder(storeName);
+  var catName = "📁 Umum";
+  var catClean = String(category || '').toLowerCase().trim();
+
+  if (catClean === 'produk' || catClean === 'product' || catClean === 'products') catName = "📁 Produk";
+  else if (catClean === 'pesanan' || catClean === 'order' || catClean === 'orders' || catClean === 'desain') catName = "📁 Pesanan & Desain";
+  else if (catClean === 'nota' || catClean === 'invoice' || catClean === 'receipt') catName = "📁 Nota Transaksi";
+  else if (catClean === 'pengeluaran' || catClean === 'expense' || catClean === 'expenses') catName = "📁 Pengeluaran";
+  else if (catClean === 'branding' || catClean === 'slider' || catClean === 'logo' || catClean === 'banner') catName = "📁 Toko & Branding";
+  else if (category) catName = "📁 " + category;
+
+  var targetFolder = getOrCreateDriveFolder(catName, rootFolder);
+  if (subContext && String(subContext).trim() !== "") {
+    targetFolder = getOrCreateDriveFolder(String(subContext).trim(), targetFolder);
+  }
+  return targetFolder;
+}
+
+// Upload file gambar (PNG, JPG, WEBP) ke Google Drive dengan auto folder sync
+function uploadFileToDrive(data) {
+  try {
+    if (!data) throw new Error("Data upload kosong");
+    var base64Raw = data.base64 || data.dataUrl || data.fileData || "";
+    if (!base64Raw) throw new Error("Konten file gambar (base64) tidak ditemukan");
+
+    var mimeType = data.mimeType || "image/jpeg";
+    var fileName = data.fileName || ("upload_" + new Date().getTime() + ".jpg");
+
+    if (base64Raw.indexOf(";base64,") !== -1) {
+      var parts = base64Raw.split(";base64,");
+      var mimePart = parts[0].replace("data:", "");
+      if (mimePart) mimeType = mimePart;
+      base64Raw = parts[1];
+    }
+
+    if (mimeType === "image/png" && !fileName.toLowerCase().endsWith(".png")) {
+      fileName = fileName.replace(/\\.[^/.]+$/, "") + ".png";
+    } else if (mimeType === "image/webp" && !fileName.toLowerCase().endsWith(".webp")) {
+      fileName = fileName.replace(/\\.[^/.]+$/, "") + ".webp";
+    } else if ((mimeType === "image/jpeg" || mimeType === "image/jpg") && !fileName.toLowerCase().endsWith(".jpg") && !fileName.toLowerCase().endsWith(".jpeg")) {
+      fileName = fileName.replace(/\\.[^/.]+$/, "") + ".jpg";
+    }
+
+    var decodedBytes = Utilities.base64Decode(base64Raw);
+    var blob = Utilities.newBlob(decodedBytes, mimeType, fileName);
+    var targetFolder = getDriveFolderForCategory(data.category, data.storeName, data.subfolder);
+    var file = targetFolder.createFile(blob);
+
+    try {
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (shareErr) {
+      Logger.log("Info permission Drive: " + shareErr.message);
+    }
+
+    var fileId = file.getId();
+    var directViewUrl = "https://lh3.googleusercontent.com/d/" + fileId;
+    var driveUrl = "https://drive.google.com/uc?export=view&id=" + fileId;
+    var webViewLink = file.getUrl();
+
+    return {
+      success: true,
+      message: "Gambar berhasil disimpan ke Google Drive",
+      fileId: fileId,
+      url: directViewUrl,
+      driveUrl: driveUrl,
+      webViewLink: webViewLink,
+      fileName: fileName,
+      folderName: targetFolder.getName(),
+      folderUrl: targetFolder.getUrl(),
+      category: data.category || 'umum'
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: "Gagal menyimpan ke Google Drive: " + err.message,
+      error: err.toString()
+    };
+  }
+}
+
+function getDriveFoldersList(storeName) {
+  try {
+    var rootFolder = getAppRootDriveFolder(storeName);
+    var categories = ["Produk", "Pesanan & Desain", "Nota Transaksi", "Pengeluaran", "Toko & Branding"];
+    var folders = [{ name: rootFolder.getName(), url: rootFolder.getUrl(), isRoot: true }];
+    for (var i = 0; i < categories.length; i++) {
+      var f = getOrCreateDriveFolder("📁 " + categories[i], rootFolder);
+      folders.push({ name: f.getName(), url: f.getUrl(), isRoot: false });
+    }
+    return { success: true, rootName: rootFolder.getName(), rootUrl: rootFolder.getUrl(), folders: folders };
+  } catch (e) {
+    return { success: false, error: e.toString() };
   }
 }`;
 

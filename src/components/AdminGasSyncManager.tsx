@@ -17,7 +17,11 @@ import {
   Save,
   Trash2,
   Edit3,
-  Server
+  Server,
+  Cloud,
+  FolderCheck,
+  FolderPlus,
+  Image as ImageIcon
 } from 'lucide-react';
 import { StoreData } from '../types';
 import { GAS_CONFIG } from '../config/gasConfig';
@@ -573,6 +577,75 @@ export const AdminGasSyncManager: React.FC<AdminGasSyncManagerProps> = ({
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Penyimpanan Gambar Google Drive & Sinkronisasi Folder Otomatis */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-teal-950 p-4 rounded-2xl border border-teal-800/40 space-y-3 text-white">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Cloud className="w-4 h-4 text-teal-400" />
+            <span className="font-bold text-xs text-teal-200">
+              Penyimpanan Gambar ke Google Drive (PNG, JPG, WEBP)
+            </span>
+          </div>
+          <span className="text-[10px] text-teal-300 font-mono bg-teal-900/60 px-2 py-0.5 rounded-full border border-teal-700 flex items-center gap-1">
+            <FolderCheck className="w-3 h-3 text-emerald-400" />
+            <span>Folder Otomatis</span>
+          </span>
+        </div>
+
+        <p className="text-[11px] text-slate-300 leading-relaxed">
+          Seluruh gambar yang diunggah ke aplikasi otomatis disimpan ke <strong>Google Drive</strong> dan ditata ke dalam folder yang tersinkronisasi berdasarkan data:
+        </p>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px]">
+          <div className="bg-slate-800/80 border border-slate-700/80 p-2 rounded-xl flex items-center gap-2">
+            <span className="text-base">📁</span>
+            <div>
+              <strong className="text-slate-100 block">Produk</strong>
+              <span className="text-slate-400">Katalog Foto Produk</span>
+            </div>
+          </div>
+          <div className="bg-slate-800/80 border border-slate-700/80 p-2 rounded-xl flex items-center gap-2">
+            <span className="text-base">📁</span>
+            <div>
+              <strong className="text-slate-100 block">Pesanan & Desain</strong>
+              <span className="text-slate-400">File Desain Customer</span>
+            </div>
+          </div>
+          <div className="bg-slate-800/80 border border-slate-700/80 p-2 rounded-xl flex items-center gap-2">
+            <span className="text-base">📁</span>
+            <div>
+              <strong className="text-slate-100 block">Nota Transaksi</strong>
+              <span className="text-slate-400">Arsip Gambar Nota</span>
+            </div>
+          </div>
+          <div className="bg-slate-800/80 border border-slate-700/80 p-2 rounded-xl flex items-center gap-2">
+            <span className="text-base">📁</span>
+            <div>
+              <strong className="text-slate-100 block">Pengeluaran</strong>
+              <span className="text-slate-400">Foto Nota Belanja Toko</span>
+            </div>
+          </div>
+          <div className="bg-slate-800/80 border border-slate-700/80 p-2 rounded-xl flex items-center gap-2">
+            <span className="text-base">📁</span>
+            <div>
+              <strong className="text-slate-100 block">Toko & Branding</strong>
+              <span className="text-slate-400">Logo, Banner & Slider</span>
+            </div>
+          </div>
+          <div className="bg-slate-800/80 border border-slate-700/80 p-2 rounded-xl flex items-center justify-center">
+            <a
+              href="https://drive.google.com/drive/my-drive"
+              target="_blank"
+              rel="noreferrer"
+              className="text-teal-300 hover:text-teal-200 font-bold flex items-center gap-1.5 py-1 px-2 rounded-lg bg-teal-900/60 border border-teal-700/80 hover:bg-teal-900 transition"
+            >
+              <ExternalLink className="w-3 h-3" />
+              <span>Buka Google Drive</span>
+            </a>
+          </div>
         </div>
       </div>
 

@@ -154,9 +154,10 @@ export const AdminExpenseModal: React.FC<AdminExpenseModalProps> = ({
               value={notaUrl}
               onChange={setNotaUrl}
               label="Nota / Foto Bukti Bayar (Opsional)"
-              description="Upload foto nota berformat PNG, JPG, atau WEBP"
+              description="Upload foto nota berformat PNG, JPG, atau WEBP (Tersimpan otomatis ke Google Drive 📁 Pengeluaran)"
               placeholderText="Upload foto nota pengeluaran (PNG, JPG, WEBP)"
               aspectRatio="auto"
+              category="pengeluaran"
             />
           </div>
 
