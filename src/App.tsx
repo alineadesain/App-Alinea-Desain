@@ -42,10 +42,16 @@ import {
   syncGasDeleteProduct,
   syncGasExpense,
   syncGasDeleteExpense,
+  syncGasStoreData,
+  syncStoreBrandingToGas,
   fetchServerState,
   saveServerState,
   deduplicateProducts,
-  deduplicateUsers
+  deduplicateUsers,
+  normalizeOrder,
+  normalizeOrderStatus,
+  parseStoreDataObject,
+  sortOrdersLatestFirst
 } from './services/gasSyncService';
 import {
   sendOrderCreatedNotification,
@@ -228,37 +234,48 @@ export default function App() {
         const res = await fetchServerState();
         if (isMounted && res.success && res.data) {
           const s = res.data;
+          const parsedServerStore = parseStoreDataObject(s.storeData);
           setAppData((prev) => {
             const mergedStore = {
               ...prev.storeData,
-              ...(s.storeData || {})
+              ...parsedServerStore
             };
+            if (parsedServerStore.logo_url) {
+              mergedStore.logo_url = parsedServerStore.logo_url;
+            }
             return {
               users: (s.users && s.users.length > 0) ? deduplicateUsers(s.users) : prev.users,
               products: (s.products && s.products.length > 0) ? deduplicateProducts(s.products) : prev.products,
-              orders: (s.orders && s.orders.length > 0) ? s.orders : prev.orders,
+              orders: (s.orders && s.orders.length > 0) ? sortOrdersLatestFirst(s.orders.map(normalizeOrder)) : prev.orders,
               expenses: (s.expenses && s.expenses.length > 0) ? s.expenses : prev.expenses,
               storeData: mergedStore
             };
           });
 
-          const effectiveGas = s.storeData?.gas_web_app_url || getActiveGasUrl();
+          const effectiveGas = parsedServerStore.gas_web_app_url || s.storeData?.gas_web_app_url || getActiveGasUrl();
           if (effectiveGas && effectiveGas.startsWith('http')) {
             fetchAllDataFromGas(effectiveGas).then((gasRes) => {
               if (isMounted && gasRes.success && gasRes.data) {
                 const remote = gasRes.data;
-                setAppData((prev) => ({
-                  users: (remote.users && remote.users.length > 0) ? deduplicateUsers(remote.users) : prev.users,
-                  products: (remote.products && remote.products.length > 0) ? deduplicateProducts(remote.products) : prev.products,
-                  orders: (remote.orders && remote.orders.length > 0) ? remote.orders : prev.orders,
-                  expenses: (remote.expenses && remote.expenses.length > 0) ? remote.expenses : prev.expenses,
-                  storeData: {
+                const parsedRemoteStore = parseStoreDataObject(remote.storeData);
+                setAppData((prev) => {
+                  const updatedStore = {
                     ...prev.storeData,
-                    ...(remote.storeData || {}),
+                    ...parsedRemoteStore,
                     gas_web_app_url: effectiveGas,
                     last_synced_at: new Date().toISOString()
+                  };
+                  if (parsedRemoteStore.logo_url) {
+                    updatedStore.logo_url = parsedRemoteStore.logo_url;
                   }
-                }));
+                  return {
+                    users: (remote.users && remote.users.length > 0) ? deduplicateUsers(remote.users) : prev.users,
+                    products: (remote.products && remote.products.length > 0) ? deduplicateProducts(remote.products) : prev.products,
+                    orders: (remote.orders && remote.orders.length > 0) ? sortOrdersLatestFirst(remote.orders.map(normalizeOrder)) : prev.orders,
+                    expenses: (remote.expenses && remote.expenses.length > 0) ? remote.expenses : prev.expenses,
+                    storeData: updatedStore
+                  };
+                });
               }
             }).catch((err) => console.warn('Auto sync Google Sheets on init error:', err));
           }
@@ -859,14 +876,34 @@ export default function App() {
 
   // Save store identity (Name, Tagline, Logo)
   const handleSaveBranding = (branding: { nama_toko: string; tagline: string; logo_url: string }) => {
-    setAppData((prev) => ({
-      ...prev,
-      storeData: {
+    setAppData((prev) => {
+      const nextStore = {
         ...prev.storeData,
         ...branding
-      }
-    }));
-    showToast('Identitas & Logo Toko berhasil diperbarui!');
+      };
+      const nextState = {
+        ...prev,
+        storeData: nextStore
+      };
+      saveServerState(nextState);
+      return nextState;
+    });
+
+    // Sinkronkan langsung ke Google Spreadsheet di sheet StoreData
+    const effectiveGas = appData.storeData?.gas_web_app_url || getActiveGasUrl();
+    if (effectiveGas && effectiveGas.startsWith('http')) {
+      syncStoreBrandingToGas(effectiveGas, branding)
+        .then((res) => {
+          if (res.success) {
+            console.log('Logo & identitas toko berhasil tersimpan ke Google Spreadsheet');
+          } else {
+            console.warn('Gagal sync branding ke Spreadsheet:', res.message);
+          }
+        })
+        .catch((err) => console.warn('Error sync branding ke GAS:', err));
+    }
+
+    showToast('Identitas & Logo Toko tersimpan & tersinkron ke Spreadsheet!');
   };
 
   // Update partial store data (GAS Web App URL, Sync timestamp, WA configs)
@@ -961,45 +998,7 @@ export default function App() {
             })))
           : prev.products,
         orders: (remoteData.orders && remoteData.orders.length > 0)
-          ? remoteData.orders.map((o: any) => {
-              const total = Number(o.TotalHarga || 0);
-              const dp = Number(o.DP !== undefined && o.DP !== null && o.DP !== '' ? o.DP : (o.NominalDP || 0));
-              const rawSisa = o['Sisa Tagihan'] !== undefined && o['Sisa Tagihan'] !== null && o['Sisa Tagihan'] !== ''
-                ? o['Sisa Tagihan']
-                : (o.SisaTagihan !== undefined && o.SisaTagihan !== null && o.SisaTagihan !== ''
-                  ? o.SisaTagihan
-                  : (o.sisaTagihan !== undefined && o.sisaTagihan !== null && o.sisaTagihan !== '' ? o.sisaTagihan : undefined));
-              const sisa = rawSisa !== undefined ? Number(rawSisa) : Math.max(0, total - dp);
-              let parsedItems = o.Items;
-              if (typeof parsedItems === 'string') {
-                try {
-                  const arr = JSON.parse(parsedItems);
-                  if (Array.isArray(arr)) parsedItems = arr;
-                } catch {
-                  // ignore
-                }
-              }
-              return {
-                ...o,
-                ID: String(o.ID),
-                Qty: Number(o.Qty || 1),
-                Panjang: Number(o.Panjang || 0),
-                Lebar: Number(o.Lebar || 0),
-                JasaCutting: Number(o.JasaCutting || 0),
-                JasaLaminating: Number(o.JasaLaminating || 0),
-                JasaDesain: Number(o.JasaDesain || 0),
-                JasaLain: Number(o.JasaLain || 0),
-                NamaJasaLain: o.NamaJasaLain ? String(o.NamaJasaLain) : undefined,
-                FileDesain: o.FileDesain ? String(o.FileDesain) : undefined,
-                TotalHarga: total,
-                DP: dp,
-                NominalDP: dp,
-                SisaTagihan: sisa,
-                StatusBayar: o.StatusBayar || (dp >= total && total > 0 ? 'Lunas' : (dp > 0 ? 'DP' : 'Belum Lunas')),
-                StatusOrder: o.StatusOrder || 'Order Masuk',
-                Items: parsedItems
-              };
-            })
+          ? sortOrdersLatestFirst(remoteData.orders.map(normalizeOrder))
           : prev.orders,
         orderItems: remoteData.orderItems || prev.orderItems || [],
         expenses: (remoteData.expenses && remoteData.expenses.length > 0)
@@ -1012,12 +1011,19 @@ export default function App() {
               Tgl: ex.Tgl ? String(ex.Tgl).split('T')[0] : new Date().toISOString().split('T')[0]
             }))
           : prev.expenses,
-        storeData: {
-          ...prev.storeData,
-          ...(remoteData.storeData || {}),
-          gas_web_app_url: effectiveUrl,
-          last_synced_at: new Date().toISOString()
-        }
+        storeData: (() => {
+          const parsed = parseStoreDataObject(remoteData.storeData);
+          const nextStore = {
+            ...prev.storeData,
+            ...parsed,
+            gas_web_app_url: effectiveUrl,
+            last_synced_at: new Date().toISOString()
+          };
+          if (parsed.logo_url) {
+            nextStore.logo_url = parsed.logo_url;
+          }
+          return nextStore;
+        })()
       }));
       return {
         success: true,
@@ -1144,14 +1150,17 @@ export default function App() {
     showToast('Slider instansi / customer berhasil diperbarui!');
   };
 
-  // Filtered orders for dashboard
-  const filteredOrders = appData.orders.filter((o) => {
-    if (!filterStartDate && !filterEndDate) return true;
-    const orderDate = o.Tgl.split('T')[0];
-    if (filterStartDate && orderDate < filterStartDate) return false;
-    if (filterEndDate && orderDate > filterEndDate) return false;
-    return true;
-  });
+  // Filtered orders for dashboard (urutan terbaru di paling atas)
+  const filteredOrders = useMemo(() => {
+    const list = appData.orders.filter((o) => {
+      if (!filterStartDate && !filterEndDate) return true;
+      const orderDate = o.Tgl.split('T')[0];
+      if (filterStartDate && orderDate < filterStartDate) return false;
+      if (filterEndDate && orderDate > filterEndDate) return false;
+      return true;
+    });
+    return sortOrdersLatestFirst(list);
+  }, [appData.orders, filterStartDate, filterEndDate]);
 
   const totalPemasukan = filteredOrders.reduce((sum, o) => sum + (o.TotalHarga || 0), 0);
   const totalPengeluaran = appData.expenses.reduce((sum, e) => sum + (e.Total || 0), 0);
@@ -1177,12 +1186,37 @@ export default function App() {
     return Array.from(map.values()).sort((a, b) => a.nama.localeCompare(b.nama));
   }, [appData.orders]);
 
-  // Filtered orders untuk tab Transaksi admin
+  // Filtered orders untuk tab Transaksi admin (urutan order terbaru di paling atas)
   const filteredAdminOrders = useMemo(() => {
-    return appData.orders.filter((ord) => {
-      // Filter status order
-      if (adminOrderStatusFilter !== 'semua' && ord.StatusOrder !== adminOrderStatusFilter) {
-        return false;
+    const list = appData.orders.filter((ord) => {
+      // Filter status order dengan toleransi variasi penamaan
+      if (adminOrderStatusFilter !== 'semua') {
+        const ordStatusClean = String(ord.StatusOrder || '').toLowerCase().trim();
+        const filterClean = String(adminOrderStatusFilter).toLowerCase().trim();
+        if (filterClean === 'order masuk') {
+          const isMasuk =
+            ordStatusClean === 'order masuk' ||
+            ordStatusClean === 'order baru' ||
+            ordStatusClean === 'baru' ||
+            ordStatusClean === 'masuk' ||
+            !ordStatusClean;
+          if (!isMasuk) return false;
+        } else if (filterClean === 'proses') {
+          const isProses =
+            ordStatusClean === 'proses' ||
+            ordStatusClean.includes('proses') ||
+            ordStatusClean.includes('pengerjaan');
+          if (!isProses) return false;
+        } else if (filterClean === 'selesai') {
+          const isSelesai =
+            ordStatusClean === 'selesai' ||
+            ordStatusClean.includes('selesai') ||
+            ordStatusClean === 'siap diambil' ||
+            ordStatusClean === 'done';
+          if (!isSelesai) return false;
+        } else if (ordStatusClean !== filterClean) {
+          return false;
+        }
       }
       // Filter status bayar
       if (adminOrderBayarFilter !== 'semua' && ord.StatusBayar !== adminOrderBayarFilter) {
@@ -1200,16 +1234,19 @@ export default function App() {
         const q = adminOrderSearchTerm.toLowerCase().trim();
         const inId = ord.ID.toLowerCase().includes(q);
         const inCustomer = ord.NamaCustomer.toLowerCase().includes(q) || (ord.KodeCustomer && ord.KodeCustomer.toLowerCase().includes(q));
-        const inPhone = ord.NoCustomer && ord.NoCustomer.includes(q);
+        const inPhone = ord.NoCustomer && String(ord.NoCustomer).includes(q);
         const inProduct = ord.NamaProduk.toLowerCase().includes(q);
         const inCatatan = ord.Catatan && ord.Catatan.toLowerCase().includes(q);
-        const inItems = ord.Items && ord.Items.some((it) => it.namaProduk.toLowerCase().includes(q));
+        const inItems = ord.Items && ord.Items.some((it: any) => (it.namaProduk || '').toLowerCase().includes(q));
         if (!inId && !inCustomer && !inPhone && !inProduct && !inCatatan && !inItems) {
           return false;
         }
       }
       return true;
     });
+
+    // Urutan order terbaru berada di paling atas
+    return sortOrdersLatestFirst(list);
   }, [appData.orders, adminOrderStatusFilter, adminOrderBayarFilter, adminOrderCustomerFilter, adminOrderSearchTerm]);
 
   // Filtered products
@@ -1220,10 +1257,12 @@ export default function App() {
     return matchSearch && matchCat;
   });
 
-  // Customer orders
-  const customerOrders = currentUser
-    ? appData.orders.filter((o) => String(o.KodeCustomer) === String(currentUser.KodeKhusus))
-    : [];
+  // Customer orders (urutan order terbaru di paling atas)
+  const customerOrders = useMemo(() => {
+    if (!currentUser) return [];
+    const list = appData.orders.filter((o) => String(o.KodeCustomer) === String(currentUser.KodeKhusus));
+    return sortOrdersLatestFirst(list);
+  }, [appData.orders, currentUser]);
 
   // JIKA BELUM LOGIN: Arahkan LANGSUNG ke tampilan portal login sebelum semua user masuk ke aplikasi!
   if (!currentUser) {
@@ -2698,7 +2737,19 @@ export default function App() {
                             {(['semua', 'Order Masuk', 'Proses', 'Selesai'] as const).map((st) => {
                               const count = st === 'semua'
                                 ? appData.orders.length
-                                : appData.orders.filter((o) => o.StatusOrder === st).length;
+                                : appData.orders.filter((o) => {
+                                    const s = String(o.StatusOrder || '').toLowerCase().trim();
+                                    if (st === 'Order Masuk') {
+                                      return s === 'order masuk' || s === 'order baru' || s === 'baru' || s === 'masuk' || !s;
+                                    }
+                                    if (st === 'Proses') {
+                                      return s === 'proses' || s.includes('proses') || s.includes('pengerjaan');
+                                    }
+                                    if (st === 'Selesai') {
+                                      return s === 'selesai' || s.includes('selesai') || s === 'siap diambil' || s === 'done';
+                                    }
+                                    return false;
+                                  }).length;
                               const isActive = adminOrderStatusFilter === st;
 
                               return (
@@ -2869,7 +2920,15 @@ export default function App() {
                                     Status Order:
                                   </label>
                                   <select
-                                    value={ord.StatusOrder}
+                                    value={
+                                      ord.StatusOrder === 'Selesai' || String(ord.StatusOrder).toLowerCase().includes('selesai') || String(ord.StatusOrder).toLowerCase() === 'siap diambil'
+                                        ? 'Selesai'
+                                        : ord.StatusOrder === 'Proses' || String(ord.StatusOrder).toLowerCase().includes('proses') || String(ord.StatusOrder).toLowerCase().includes('pengerjaan')
+                                        ? 'Proses'
+                                        : ord.StatusOrder === 'Order Masuk' || String(ord.StatusOrder).toLowerCase() === 'order baru' || String(ord.StatusOrder).toLowerCase() === 'baru'
+                                        ? 'Order Masuk'
+                                        : ord.StatusOrder
+                                    }
                                     onChange={(e) =>
                                       handleUpdateOrderStatus(
                                         ord.ID,
@@ -2878,9 +2937,12 @@ export default function App() {
                                     }
                                     className="w-full p-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg font-bold"
                                   >
-                                    <option value="Order Masuk">Order Masuk</option>
+                                    <option value="Order Masuk">Order Masuk (Baru)</option>
                                     <option value="Proses">Proses Pengerjaan</option>
                                     <option value="Selesai">Selesai (Kirim WA)</option>
+                                    {ord.StatusOrder && !['Order Masuk', 'Proses', 'Selesai', 'Order Baru'].includes(ord.StatusOrder) && (
+                                      <option value={ord.StatusOrder}>{ord.StatusOrder}</option>
+                                    )}
                                   </select>
                                 </div>
 

@@ -243,7 +243,32 @@ function getSheetData(sheetName) {
   const rows = data.slice(1);
   return rows.map(row => {
     let obj = {};
-    headers.forEach((header, i) => obj[header] = row[i]);
+    headers.forEach((header, i) => {
+      const hStr = String(header).trim();
+      obj[hStr] = row[i];
+      // Dukung pencocokan tanpa spasi & lowercase
+      const cleanKey = hStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanKey && cleanKey !== hStr) {
+        obj[cleanKey] = row[i];
+      }
+      // Khusus Orders: petakan alias standar PascalCase
+      if (cleanKey === 'statusorder' || cleanKey === 'orderstatus' || cleanKey === 'statuspesanan' || cleanKey === 'status') {
+        if (!obj.StatusOrder && row[i] !== undefined && row[i] !== '') obj.StatusOrder = row[i];
+      }
+      if (cleanKey === 'statusbayar' || cleanKey === 'bayar' || cleanKey === 'statuspembayaran') {
+        if (!obj.StatusBayar && row[i] !== undefined && row[i] !== '') obj.StatusBayar = row[i];
+      }
+      if (cleanKey === 'totalharga' || cleanKey === 'total') {
+        if (!obj.TotalHarga && row[i] !== undefined && row[i] !== '') obj.TotalHarga = row[i];
+      }
+      if (cleanKey === 'sisatagihan' || cleanKey === 'sisa') {
+        if (!obj['Sisa Tagihan'] && row[i] !== undefined && row[i] !== '') obj['Sisa Tagihan'] = row[i];
+        if (!obj.SisaTagihan && row[i] !== undefined && row[i] !== '') obj.SisaTagihan = row[i];
+      }
+      if (cleanKey === 'nominaldp' || cleanKey === 'dp') {
+        if (!obj.DP && row[i] !== undefined && row[i] !== '') obj.DP = row[i];
+      }
+    });
     return obj;
   });
 }
@@ -262,6 +287,16 @@ function fetchAllData() {
     }
     const orders = getSheetData('Orders');
     const orderItems = getSheetData('OrderItems');
+
+    // Normalisasi Orders agar statusorder selalu terbaca akurat dari spreadsheet
+    orders.forEach(function(ord) {
+      if (!ord.StatusOrder) {
+        ord.StatusOrder = ord['Status Order'] || ord.statusorder || ord.status || ord['Status Pesanan'] || ord.StatusProduksi || ord['Status Pengerjaan'] || 'Order Masuk';
+      }
+      if (!ord.StatusBayar) {
+        ord.StatusBayar = ord['Status Bayar'] || ord.statusbayar || ord['Status Pembayaran'] || ord.bayar || 'Belum Lunas';
+      }
+    });
 
     // Hubungkan item rincian ke masing-masing order jika ada data di OrderItems
     if (orderItems && orderItems.length > 0) {
@@ -300,17 +335,34 @@ function fetchAllData() {
       });
     }
 
+    // Olah StoreData menjadi dictionary objek agar logo_url, nama_toko, tagline dapat langsung dibaca di perangkat lain
+    const rawStore = getSheetData('StoreData');
+    const storeObj = {};
+    if (Array.isArray(rawStore)) {
+      rawStore.forEach(function(row) {
+        const k = String(row.Key || row.key || '').trim();
+        const v = row.Value !== undefined ? row.Value : (row.value !== undefined ? row.value : '');
+        if (k) {
+          storeObj[k] = v;
+        }
+      });
+    }
+    if (storeObj.logo && !storeObj.logo_url) {
+      storeObj.logo_url = storeObj.logo;
+    }
+
     return {
       users: getSheetData('Users'),
       products: getSheetData('Products'),
       orders: orders,
       orderItems: orderItems,
       expenses: getSheetData('Expenses'),
-      storeData: getSheetData('StoreData')
+      storeData: storeObj,
+      rawStoreData: rawStore
     };
   } catch (e) {
     Logger.log("Error fetchAllData: " + e.message);
-    return { users: [], products: [], orders: [], expenses: [], storeData: [] };
+    return { users: [], products: [], orders: [], expenses: [], storeData: {}, rawStoreData: [] };
   }
 }
 
@@ -697,9 +749,23 @@ function updateOrderStatus(orderId, status, noCustomer, orderDetailText) {
     const sheet = getSpreadsheet().getSheetByName('Orders');
     if (!sheet) return { success: false, message: 'Sheet Orders tidak ditemukan' };
     const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return { success: false, message: 'Sheet Orders kosong' };
+
+    // Cari letak kolom StatusOrder secara dinamis dari header
+    const headers = data[0];
+    let statusColIndex = -1;
+    for (let h = 0; h < headers.length; h++) {
+      const cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanH === 'statusorder' || cleanH === 'orderstatus' || cleanH === 'statuspesanan' || cleanH === 'statusproduksi' || cleanH === 'status') {
+        statusColIndex = h + 1;
+        break;
+      }
+    }
+    if (statusColIndex === -1) statusColIndex = 18; // Fallback kolom 18
+
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(orderId)) {
-        sheet.getRange(i + 1, 18).setValue(status);
+        sheet.getRange(i + 1, statusColIndex).setValue(status);
         if (noCustomer && noCustomer !== '-') {
           if (status === 'Selesai') {
             sendWA(noCustomer, "Halo Kak, pesanan Anda di *Alinea Desain* (*" + orderId + "*) telah *SELESAI* dan siap diambil/dikirim.\n\nDetail:\n" + (orderDetailText || '') + "\n\nTerima kasih telah mempercayakan cetakan Anda kepada kami! 🙏");
@@ -1114,11 +1180,19 @@ function updateAdminProfile(data) {
 // Simpan Pengaturan Toko & Logo (Key-Value)
 function updateStoreData(key, value) {
   try {
-    const sheet = getSpreadsheet().getSheetByName('StoreData');
-    if (!sheet) return { success: false };
+    let sheet = getSpreadsheet().getSheetByName('StoreData');
+    if (!sheet) {
+      setupDatabase();
+      sheet = getSpreadsheet().getSheetByName('StoreData');
+    }
+    if (!sheet) return { success: false, message: 'Sheet StoreData tidak ditemukan' };
     const rows = sheet.getDataRange().getValues();
+    const targetKey = String(key).toLowerCase().trim();
+
     for (let i = 1; i < rows.length; i++) {
-      if (String(rows[i][0]) === String(key)) {
+      const rowKey = String(rows[i][0]).toLowerCase().trim();
+      const isLogoMatch = (targetKey === 'logo_url' || targetKey === 'logo') && (rowKey === 'logo_url' || rowKey === 'logo');
+      if (rowKey === targetKey || isLogoMatch) {
         sheet.getRange(i + 1, 2).setValue(value);
         return { success: true };
       }
@@ -1133,8 +1207,11 @@ function updateStoreData(key, value) {
 // Simpan Semua Informasi Toko Sekaligus
 function saveAllStoreData(storeObj) {
   try {
+    if (!storeObj) return { success: false, message: 'Data toko kosong' };
     for (let k in storeObj) {
-      updateStoreData(k, typeof storeObj[k] === 'object' ? JSON.stringify(storeObj[k]) : String(storeObj[k]));
+      if (storeObj[k] !== undefined && storeObj[k] !== null) {
+        updateStoreData(k, typeof storeObj[k] === 'object' ? JSON.stringify(storeObj[k]) : String(storeObj[k]));
+      }
     }
     return { success: true };
   } catch (err) {

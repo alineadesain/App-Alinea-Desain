@@ -216,6 +216,176 @@ export function deduplicateUsers(users: any[]): any[] {
 }
 
 /**
+ * Normalisasi status order dari spreadsheet agar tidak kembali ke default 'Order Masuk'
+ * jika di spreadsheet statusnya adalah 'Proses', 'Selesai', 'Order Baru', atau status kustom lainnya.
+ */
+export function normalizeOrderStatus(rawStatus: any): string {
+  if (rawStatus === undefined || rawStatus === null) return 'Order Masuk';
+  const str = String(rawStatus).trim();
+  if (!str) return 'Order Masuk';
+
+  const lower = str.toLowerCase();
+  if (lower === 'selesai' || lower === 'done' || lower === 'completed' || lower.includes('selesai') || lower === 'siap diambil') {
+    return 'Selesai';
+  }
+  if (lower === 'proses' || lower === 'diproses' || lower === 'sedang diproses' || lower === 'pengerjaan' || lower === 'dalam pengerjaan' || lower.includes('proses')) {
+    return 'Proses';
+  }
+  if (lower === 'order masuk' || lower === 'order baru' || lower === 'baru' || lower === 'masuk' || lower === 'pending') {
+    return 'Order Masuk';
+  }
+  // Pertahankan status kustom yang mungkin diketik langsung di spreadsheet
+  return str;
+}
+
+/**
+ * Normalisasi objek Order dari Google Spreadsheet agar semua variasi nama kolom
+ * (dengan spasi, huruf kecil/besar) dapat terbaca akurat tanpa reset status
+ */
+export function normalizeOrder(o: any): any {
+  if (!o) return null;
+  // Deteksi status order dari segala variasi nama kolom di sheet
+  const rawStatus =
+    o.StatusOrder ??
+    o['Status Order'] ??
+    o.statusOrder ??
+    o.statusorder ??
+    o.status_order ??
+    o.Status ??
+    o.status ??
+    o['Status Pesanan'] ??
+    o.StatusProduksi ??
+    o['Status Pengerjaan'];
+
+  const finalStatus = normalizeOrderStatus(rawStatus);
+
+  // Status bayar
+  const rawBayar =
+    o.StatusBayar ??
+    o['Status Bayar'] ??
+    o.statusBayar ??
+    o.statusbayar ??
+    o['Status Pembayaran'] ??
+    o.Bayar ??
+    o.bayar;
+
+  const total = Number(o.TotalHarga ?? o['Total Harga'] ?? o.totalHarga ?? o.total ?? 0);
+  const dp = Number(o.DP ?? o['Nominal DP'] ?? o.NominalDP ?? o.nominalDP ?? o.dp ?? 0);
+  const rawSisa = o['Sisa Tagihan'] ?? o.SisaTagihan ?? o.sisaTagihan ?? o.Sisa ?? o.sisa;
+  const sisa =
+    rawSisa !== undefined && rawSisa !== null && rawSisa !== ''
+      ? Number(rawSisa)
+      : Math.max(0, total - dp);
+
+  let statusBayar = rawBayar;
+  if (!statusBayar) {
+    statusBayar = dp >= total && total > 0 ? 'Lunas' : dp > 0 ? 'DP' : 'Belum Lunas';
+  }
+
+  let parsedItems = o.Items ?? o.items ?? o.Rincian;
+  if (typeof parsedItems === 'string') {
+    try {
+      const arr = JSON.parse(parsedItems);
+      if (Array.isArray(arr)) parsedItems = arr;
+    } catch {
+      // Biarkan jika gagal parse
+    }
+  }
+
+  return {
+    ...o,
+    ID: String(o.ID ?? o.id ?? `ORD-${Date.now()}`),
+    Tgl: o.Tgl ?? o.tgl ?? o.Tanggal ?? o.tanggal ?? new Date().toISOString(),
+    KodeCustomer: String(o.KodeCustomer ?? o['Kode Customer'] ?? o.kodeCustomer ?? o.Kode ?? '-'),
+    NamaCustomer: String(o.NamaCustomer ?? o['Nama Customer'] ?? o.namaCustomer ?? o.Customer ?? 'Customer'),
+    NoCustomer: String(o.NoCustomer ?? o['No Customer'] ?? o['No WA'] ?? o.noCustomer ?? o.nowa ?? '-'),
+    IDProduk: String(o.IDProduk ?? o['ID Produk'] ?? o.idProduk ?? '-'),
+    NamaProduk: String(o.NamaProduk ?? o['Nama Produk'] ?? o.namaProduk ?? o.Produk ?? 'Produk'),
+    Kategori: o.Kategori ?? o.kategori ?? 'satuan',
+    Qty: Number(o.Qty ?? o.qty ?? o.Jumlah ?? 1),
+    Panjang: Number(o.Panjang ?? o.panjang ?? 0),
+    Lebar: Number(o.Lebar ?? o.lebar ?? 0),
+    Finishing: String(o.Finishing ?? o.finishing ?? '-'),
+    JasaCutting: Number(o.JasaCutting ?? o['Jasa Cutting'] ?? o.Cutting ?? 0),
+    JasaLaminating: Number(o.JasaLaminating ?? o['Jasa Laminating'] ?? o.Laminating ?? 0),
+    JasaDesain: Number(o.JasaDesain ?? o['Jasa Desain'] ?? o.Desain ?? 0),
+    JasaLain: Number(o.JasaLain ?? 0),
+    NamaJasaLain: o.NamaJasaLain ? String(o.NamaJasaLain) : undefined,
+    FileDesain: o.FileDesain ?? o['File Desain'] ?? o.fileDesain ?? o.DesainUrl,
+    TotalHarga: total,
+    DP: dp,
+    NominalDP: dp,
+    SisaTagihan: sisa,
+    StatusBayar: statusBayar,
+    StatusOrder: finalStatus,
+    Catatan: o.Catatan ?? o.catatan ?? o.Keterangan ?? '',
+    Items: parsedItems
+  };
+}
+
+/**
+ * Normalisasi dan parse StoreData dari Google Spreadsheet
+ * Mengonversi array baris tabel [Key, Value] menjadi objek yang memiliki logo_url, nama_toko, dll.
+ */
+export function parseStoreDataObject(rawStoreData: any): Record<string, any> {
+  if (!rawStoreData) return {};
+  if (Array.isArray(rawStoreData)) {
+    const obj: Record<string, any> = {};
+    rawStoreData.forEach((row) => {
+      if (!row) return;
+      const k = String(row.Key || row.key || (Array.isArray(row) ? row[0] : '') || '').trim();
+      const v =
+        row.Value !== undefined
+          ? row.Value
+          : row.value !== undefined
+          ? row.value
+          : Array.isArray(row)
+          ? row[1]
+          : '';
+      if (k) {
+        if (typeof v === 'string' && (v.startsWith('[') || v.startsWith('{'))) {
+          try {
+            obj[k] = JSON.parse(v);
+            return;
+          } catch {
+            // Abaikan parse error, simpan string
+          }
+        }
+        obj[k] = v;
+      }
+    });
+    // Alias sinkronisasi logo
+    if (obj.logo && !obj.logo_url) obj.logo_url = obj.logo;
+    return obj;
+  }
+  if (typeof rawStoreData === 'object') {
+    const copy = { ...rawStoreData };
+    if (copy.logo && !copy.logo_url) copy.logo_url = copy.logo;
+    return copy;
+  }
+  return {};
+}
+
+/**
+ * Mengurutkan pesanan dengan urutan pesanan terbaru berada di paling atas
+ */
+export function sortOrdersLatestFirst<T extends { Tgl?: string; ID?: string; Tanggal?: string }>(orders: T[]): T[] {
+  if (!Array.isArray(orders)) return [];
+  return [...orders].sort((a, b) => {
+    const rawA = a.Tgl || a.Tanggal || '';
+    const rawB = b.Tgl || b.Tanggal || '';
+    const timeA = new Date(rawA).getTime();
+    const timeB = new Date(rawB).getTime();
+    if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) {
+      return timeB - timeA; // Waktu terbaru di atas
+    }
+    const idA = String(a.ID || '');
+    const idB = String(b.ID || '');
+    return idB.localeCompare(idA, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+/**
  * Mengambil seluruh data dari Google Spreadsheet (GET)
  * Menggunakan server proxy /api/gas-fetch untuk melewati kendala CORS pada browser/perangkat baru.
  */
@@ -233,13 +403,20 @@ export async function fetchAllDataFromGas(gasUrl?: string): Promise<GasResponse>
     if (proxyRes.ok) {
       const data = await proxyRes.json();
       if (data && (data.users || data.products || data.orders || data.success)) {
+        const cleanedOrders = Array.isArray(data.orders)
+          ? sortOrdersLatestFirst(data.orders.map(normalizeOrder).filter(Boolean))
+          : [];
+        const parsedStore = parseStoreDataObject(data.storeData || data.store_data);
+
         return {
           success: true,
           message: 'Data berhasil ditarik dari Google Spreadsheet!',
           data: {
             ...data,
+            orders: cleanedOrders,
             products: deduplicateProducts(data.products || []),
-            users: deduplicateUsers(data.users || [])
+            users: deduplicateUsers(data.users || []),
+            storeData: parsedStore
           }
         };
       }
@@ -275,13 +452,20 @@ export async function fetchAllDataFromGas(gasUrl?: string): Promise<GasResponse>
     }
 
     const data = await res.json();
+    const cleanedOrders = Array.isArray(data.orders)
+      ? sortOrdersLatestFirst(data.orders.map(normalizeOrder).filter(Boolean))
+      : [];
+    const parsedStore = parseStoreDataObject(data.storeData || data.store_data);
+
     return {
       success: true,
       message: 'Data berhasil ditarik dari Google Spreadsheet!',
       data: {
         ...data,
+        orders: cleanedOrders,
         products: deduplicateProducts(data.products || []),
-        users: deduplicateUsers(data.users || [])
+        users: deduplicateUsers(data.users || []),
+        storeData: parsedStore
       }
     };
   } catch (err: any) {
@@ -403,5 +587,24 @@ export async function syncGasDeleteExpense(gasUrl: string | undefined, expenseId
  * Sinkronisasi Pengaturan Profil Toko
  */
 export async function syncGasStoreData(gasUrl: string | undefined, storeData: any): Promise<GasResponse> {
-  return sendGasAction(gasUrl, 'updateStoreData', { storeData });
+  return sendGasAction(gasUrl, 'saveAllStoreData', { storeData });
 }
+
+/**
+ * Sinkronisasi Identitas & Logo Toko ke Google Spreadsheet
+ * Menyimpan nama_toko, tagline, dan link logo_url ke sheet StoreData
+ */
+export async function syncStoreBrandingToGas(
+  gasUrl: string | undefined,
+  branding: { nama_toko: string; tagline?: string; logo_url?: string }
+): Promise<GasResponse> {
+  return sendGasAction(gasUrl, 'saveAllStoreData', {
+    storeData: {
+      nama_toko: branding.nama_toko,
+      tagline: branding.tagline || '',
+      logo_url: branding.logo_url || '',
+      logo: branding.logo_url || ''
+    }
+  });
+}
+

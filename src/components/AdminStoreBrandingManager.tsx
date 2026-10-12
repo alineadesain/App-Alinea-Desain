@@ -8,7 +8,9 @@ import {
   Eye,
   Type,
   FileText,
-  BadgeCheck
+  BadgeCheck,
+  Database,
+  Cloud
 } from 'lucide-react';
 import { StoreData } from '../types';
 import { ImageUploader } from './ImageUploader';
@@ -188,13 +190,15 @@ export const AdminStoreBrandingManager: React.FC<AdminStoreBrandingManagerProps>
         </div>
 
         {/* Upload Logo Toko (PNG, JPG, WEBP) */}
-        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+        <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
           <ImageUploader
             value={logoUrl}
             onChange={(url) => {
               setLogoUrl(url);
               setImgError(false);
             }}
+            category="branding"
+            storeName={namaToko}
             label="Logo Toko / Percetakan"
             description="Upload logo berformat PNG (transparan), JPG, atau WEBP"
             placeholderText="Upload file logo toko (PNG, JPG, WEBP)"
@@ -203,6 +207,17 @@ export const AdminStoreBrandingManager: React.FC<AdminStoreBrandingManagerProps>
             maxHeight={512}
             presets={PRESET_LOGOS.map((p) => ({ label: p.name, url: p.url }))}
           />
+
+          {/* Info Sinkronisasi Multi-Perangkat via Spreadsheet */}
+          <div className="flex items-start gap-2 p-2.5 bg-teal-50/80 border border-teal-200/70 rounded-xl text-[11px] text-teal-800">
+            <Database className="w-3.5 h-3.5 text-teal-600 mt-0.5 shrink-0" />
+            <div>
+              <span className="font-bold">Sinkronisasi Logo Multi-Perangkat:</span>
+              <p className="text-teal-700 text-[10px] mt-0.5 leading-relaxed">
+                Link logo disimpan otomatis ke Google Spreadsheet (Sheet <code>StoreData</code> baris <code>logo_url</code>) dan tersinkronisasi langsung saat perangkat lain membuka aplikasi atau klik "Tarik Sheet".
+              </p>
+            </div>
+          </div>
         </div>
 
         <button
@@ -210,7 +225,7 @@ export const AdminStoreBrandingManager: React.FC<AdminStoreBrandingManagerProps>
           className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
         >
           <Check className="w-3.5 h-3.5" />
-          <span>Simpan Identitas & Logo Toko</span>
+          <span>Simpan & Sinkronkan Identitas Toko</span>
         </button>
       </form>
     </div>
